@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<input-method xmlns:android="http://schemas.android.com/apk/res/android"
+    android:settingsActivity="io.github.kachaya.skk.SettingsActivity"
+    android:supportsSwitchingToNextInputMethod="true"
+    >
+    <subtype
+        android:imeSubtypeLocale="ja_JP"
+        android:imeSubtypeMode="keyboard"
+        android:label="%s"
+        />
+</input-method>

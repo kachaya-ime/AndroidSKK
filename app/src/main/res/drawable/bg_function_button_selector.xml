@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<inset
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:insetLeft="1dp"
+    android:insetTop="1dp"
+    android:insetRight="1dp"
+    android:insetBottom="1dp"
+    >
+
+    <selector>
+        <!-- タッチしている（押下）状態 -->
+        <item android:state_pressed="true">
+            <shape>
+                <solid android:color="@color/function_button_bg_pressed" />
+                <corners android:radius="4dp" />
+            </shape>
+        </item>
+
+        <!-- プログラムから選択状態にされたとき (selected = true) -->
+        <item android:state_selected="true">
+            <shape>
+                <solid android:color="@color/function_button_bg_selected" />
+                <corners android:radius="4dp" />
+            </shape>
+        </item>
+
+        <!-- 通常時 -->
+        <item>
+            <shape>
+                <solid android:color="@color/function_button_bg_normal" />
+                <corners android:radius="4dp" />
+            </shape>
+        </item>
+    </selector>
+</inset>
+

@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Base Colors -->
+    <color name="black">#FF000000</color>
+    <color name="white">#FFFFFFFF</color>
+
+    <!-- Material 3 Neutral Variant Palette (ベースのグレー系統) -->
+    <!-- 全体を滑らかなグラデーション（Blue-Grey系統）に調整 -->
+    <color name="neutral_variant_10">#191C1E</color> <!-- キーボード背景 -->
+    <color name="neutral_variant_15">#232629</color> <!-- 基本の機能ボタン背景 -->
+    <color name="neutral_variant_20">#2E3133</color> <!-- 文字ボタン背景 -->
+    <color name="neutral_variant_30">#44474E</color> <!-- 選択状態 -->
+    <color name="neutral_variant_40">#5B5F66</color> <!-- 押下状態 -->
+    <color name="neutral_variant_50">#74777F</color>
+    <color name="neutral_variant_60">#8E9199</color> <!-- ユーザー辞書用: 青みがかった落ち着いたグレー -->
+    <color name="neutral_variant_70">#A8ABB3</color>
+    <color name="neutral_variant_80">#C4C6CF</color>
+    <color name="neutral_variant_90">#E1E2E9</color> <!-- 文字色 -->
+
+    <!-- Functional Accent Palette (機能ボタン用の色相: Subtle Blue) -->
+    <color name="function_bg_tint">#202932</color>   <!-- 青みがかった暗色背景 -->
+    <color name="function_fg_tint">#A6C8FF</color>   <!-- 落ち着いた青色のアイコン/文字 -->
+
+    <!-- Composing Colors (入力・変換中のハイライト) -->
+    <color name="composing_composing">#33A6C8FF</color>  <!-- ▽ 見出し語入力: 20% Blue Accent -->
+    <color name="composing_converting">#4DFFD54F</color> <!-- ▼ 候補選択中: 30% Amber Accent -->
+
+    <!-- 基本背景 -->
+    <color name="keyboard_bg">@color/neutral_variant_10</color>
+
+    <!-- 各ボタンの役割別背景色 -->
+    <color name="character_button_bg_normal">@color/neutral_variant_20</color>
+
+    <!-- 機能ボタン: 色相（function_bg_tint）を変えて区別 -->
+    <color name="function_button_bg_normal">@color/function_bg_tint</color>
+
+    <!-- 候補ボタン: 文字入力に準じる -->
+    <color name="candidate_button_bg_normal">@color/neutral_variant_20</color>
+
+    <!-- 共通の状態色 -->
+    <color name="button_bg_selected">@color/neutral_variant_30</color>
+    <color name="button_bg_pressed">@color/neutral_variant_40</color>
+
+    <!-- ボタンの前景色 -->
+    <color name="function_button_fg">@color/function_fg_tint</color>
+    <color name="character_button_fg">@color/neutral_variant_90</color>
+    <color name="candidate_button_fg">@color/neutral_variant_70</color>
+    <color name="candidate_user_dict_fg">@color/neutral_variant_90</color>
+
+    <!-- 個別背景設定の適用 -->
+    <color name="function_button_bg_pressed">@color/button_bg_pressed</color>
+    <color name="function_button_bg_selected">@color/button_bg_selected</color>
+
+    <color name="character_button_bg_pressed">@color/button_bg_pressed</color>
+    <color name="character_button_bg_selected">@color/button_bg_selected</color>
+
+    <color name="candidate_button_bg_pressed">@color/button_bg_pressed</color>
+    <color name="candidate_button_bg_selected">@color/button_bg_selected</color>
+
+    <!-- ツールチップ -->
+    <color name="tooltip_fg">#BFBFBF</color>
+    <color name="tooltip_bg">#BF1F1F3F</color>
+    <color name="tooltip_border">#BFBFBF</color>
+
+</resources>

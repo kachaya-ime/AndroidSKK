@@ -1,0 +1,31 @@
+# 目的の語が出るまでの変換回数は学習内容で変わるので学習無効でテストする。
+# あらかじめかなモードにしておく。
+# 行末で変換が確定しないパターンでは「$」を行末に書くことで確定して改行する。
+
+# --- 基本 ---
+hiragana
+Katakanaq
+Kanji $
+/skk  $
+UgoKu$
+Undou suru
+Kobayasi >si  $
+Tyou>Oogata $
+
+# --- よくある例 ---
+Watasi noNamae haNakano desu.
+Kyou haYoITenki desu.
+
+# --- ぎなた読み ---
+
+kokodehakimonowonuidekudasai.
+kokodeHakimono woNuI dekudasai.
+kokodehaKimono woNuI dekudasai.
+
+kurumadematu.
+Kuruma deMaTu.
+KuRumadeMaTu.
+
+setunasamidareuti
+Setuna Samidare UTi $
+SetuNasaMidaReUTi $
