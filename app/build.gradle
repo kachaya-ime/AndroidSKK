@@ -19,32 +19,35 @@ android {
     buildTypes {
         release {
             minifyEnabled false
-            // 出力ファイル名を "AndroidSKK-1.0.0.apk" に変更する設定
-            applicationVariants.all { variant ->
-                variant.outputs.all { output ->
-                    def project = "AndroidSKK"
-                    def version = variant.versionName
-                    outputFileName = "${project}-${version}.apk"
-                }
-            }
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
     }
+
+    // Modern way to change APK name using Variant API
+    androidComponents {
+        onVariants(selector().all(), { variant ->
+            variant.outputs.forEach { output ->
+                def projectName = "AndroidSKK"
+                def versionName = variant.outputs.first().versionName.getOrElse("1.0.0")
+                output.outputFileName.set("${projectName}-${versionName}.apk")
+            }
+        })
+    }
+
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_11
         targetCompatibility JavaVersion.VERSION_11
     }
 
     lint {
-        // targetSdkVersion 33以上を求めるチェック(ExpiredTargetSdkVersion)を無視します
         disable 'ExpiredTargetSdkVersion'
-        // リリースビルド時のチェックでエラーが出ても中断しない
         checkReleaseBuilds false
         abortOnError false
     }
 
     buildFeatures {
-        buildConfig true // BuildConfigクラスの生成を明示的に有効化
+        buildConfig true
+        resValues true
     }
 }
 
