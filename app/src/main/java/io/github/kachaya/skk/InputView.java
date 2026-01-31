@@ -14,6 +14,9 @@ import android.widget.HorizontalScrollView;
 import android.widget.ImageButton;
 import android.widget.LinearLayout;
 
+import androidx.core.graphics.Insets;
+import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowInsetsCompat;
 import androidx.preference.PreferenceManager;
 
 import java.util.ArrayList;
@@ -59,8 +62,6 @@ public class InputView extends LinearLayout {
     /** 現在画面に表示されている候補ボタンの配列。 */
     private Button[] mCandidateButton;
 
-    // 候補ボタン
-
     /**
      * InputView インスタンスを生成し、初期セットアップを行います。
      * レイアウトのインフレート、各ビューの取得、およびトグルボタンの生成を含みます。
@@ -84,6 +85,14 @@ public class InputView extends LinearLayout {
         mToggleKeyboardButton = new ImageButton(new ContextThemeWrapper(context, style), null, 0);
         mToggleKeyboardButton.setOnClickListener(this::onClickToggleKeyboardButton);
         mToggleKeyboardButton.setImageResource(R.drawable.ic_keyboard_swap);
+
+        // システムナビゲーションバー（3ボタンナビ等）との重なりを防止するためのインセット処理
+        ViewCompat.setOnApplyWindowInsetsListener(this, (v, insets) -> {
+            Insets systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars());
+            // ナビゲーションバーの高さを底部のパディングとして設定
+            v.setPadding(v.getPaddingLeft(), v.getPaddingTop(), v.getPaddingRight(), systemBars.bottom);
+            return insets;
+        });
     }
 
     /**

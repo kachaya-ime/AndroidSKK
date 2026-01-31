@@ -49,13 +49,13 @@ enum SKKStateAbbrev implements SKKState {
     }
 
     /**
-     * この状態ではアイコンを表示しません。
+     * abbrev モード有効時に表示するアイコンのリソース ID を取得します。
      *
      * @return 0
      */
     @Override
     public int getIcon() {
-        return 0;
+        return R.drawable.ic_mode_abbrev;
     }
 
     // --- キー入力処理 ---

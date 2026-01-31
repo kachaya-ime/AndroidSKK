@@ -456,13 +456,19 @@ public class SKKEngine {
     }
 
     /**
-     * 入力開始時にバッファの状態を初期化します。
+     * 新しい入力セッションの開始時に、エンジンの内部状態およびバッファを初期化します。
+     * <p>
+     * 以前のセッションの見出し語や未確定文字列が残らないよう、バッファをクリアし、
+     * エディタ上の表示も最新の状態（空）に更新します。
+     * </p>
      */
     public void resetOnStartInput() {
+        reset();
         if (mState.isTransient()) {
             changeState(SKKStateDirect.INSTANCE);
         }
         mService.requestUIUpdate();
+        updateComposingText();
     }
 
     /**
