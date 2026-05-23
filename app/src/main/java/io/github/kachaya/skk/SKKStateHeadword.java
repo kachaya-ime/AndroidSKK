@@ -177,8 +177,15 @@ enum SKKStateHeadword implements SKKState {
 
     // --- ライフサイクル ---
 
+    /**
+     * 見出し語入力状態へ遷移した際の初期化を行います。
+     * 前の状態（変換中など）の候補表示が残らないよう、クリーンアップを実行します。
+     *
+     * @param context SKKエンジンのコンテキスト
+     */
     @Override
     public void onEnterState(SKKEngine context) {
+        context.clearCandidates();
     }
 
     @Override

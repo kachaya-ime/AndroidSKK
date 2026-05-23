@@ -235,25 +235,26 @@ enum SKKStateAbbrevConversion implements SKKState {
     }
 
     /**
-     * バックスペース後の処理を行います。Abbrev 入力状態へ戻ります。
+     * バックスペース処理が実行された後の状態遷移を制御します。
+     * 候補選択を中止し、Abbrev 入力状態へ戻ります。
      *
      * @param context SKKエンジンのコンテキスト
      */
     @Override
     public void afterBackspace(SKKEngine context) {
         context.changeState(SKKStateAbbrev.INSTANCE);
-        context.updateSuggestions();
     }
 
     /**
-     * 現在の変換を中断し、Abbrev 入力状態に戻ります。
+     * 現在の変換候補選択を中断し、Abbrev 入力状態に戻ります。
+     * 状態遷移に伴い、候補一覧は自動的に消去されます。
      *
      * @param context SKKエンジンのコンテキスト
      * @return 常に true
      */
     @Override
     public boolean handleCancel(SKKEngine context) {
-        afterBackspace(context);
+        context.changeState(SKKStateAbbrev.INSTANCE);
         return true;
     }
 

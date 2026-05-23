@@ -5,9 +5,10 @@ import android.view.KeyEvent;
 /**
  * 確定モード（通常の直接入力状態）を管理するクラスです。
  * <p>
- * この状態では辞書検索は行われず、入力された文字は現在のモードに従って直接コミット（確定）されます。
- * 大文字入力（Shift押下）により見出し語入力（{@link SKKStateHeadword}）へ、
- * スラッシュ入力により Abbrev モード（{@link SKKStateAbbrev}）へ遷移します。
+ * SKK の基本となる状態であり、入力された文字はローマ字かな変換を経て直接エディタへコミットされます。
+ * 大文字入力（Shift押下）による見出し語入力（{@link SKKStateHeadword}）への遷移や、
+ * スラッシュ入力による Abbrev モード（{@link SKKStateAbbrev}）への遷移の起点となります。
+ * また、単語登録セッション中のスペースキー等の特殊な挙動もこのクラスで制御されます。
  * </p>
  */
 enum SKKStateDirect implements SKKState {
@@ -84,8 +85,9 @@ enum SKKStateDirect implements SKKState {
     }
 
     /**
-     * Ctrlキーと同時押しのキー入力を処理します。
-     * 再変換（Ctrl-U）や、インターフェースで定義された共通の Ctrl キー操作を処理します。
+     * Ctrl キーと同時押しのキー入力を処理します。
+     * 再変換（Ctrl-U）、かなモードへの復帰（Ctrl-J）、キャンセル（Ctrl-G）、
+     * および単語登録中のカーソル移動ブロックなどを処理します。
      *
      * @param context SKKエンジンのコンテキスト
      * @param keyCode KeyEventで定義されているキーコード
@@ -176,7 +178,8 @@ enum SKKStateDirect implements SKKState {
 
     /**
      * 確定モードに遷移した際の初期化処理を行います。
-     * 進行中の変換バッファや候補リストをリセットし、直接入力可能な状態にします。
+     * 進行中のローマ字変換バッファ、変換候補、補完リスト、および単語登録スタックをすべてリセットし、
+     * クリーンな直接入力状態を構築します。
      *
      * @param context SKKエンジンのコンテキスト
      */
@@ -274,19 +277,13 @@ enum SKKStateDirect implements SKKState {
 
     /**
      * バックスペースキーによる削除処理を行います。
-     * 見出し語バッファがあれば 1 文字削除します。
+     * 確定モードでは SKK 側で文字を保持しないため、常に false を返してシステムに処理を委譲します。
      *
      * @param context SKKエンジンのコンテキスト
-     * @return 削除イベントを消費した場合は true
+     * @return 常に false
      */
     @Override
     public boolean processBackspace(SKKEngine context) {
-        StringBuilder headword = context.getHeadword();
-        int len = headword.length();
-        if (len > 0) {
-            headword.deleteCharAt(len - 1);
-            return true;
-        }
         return false;
     }
 

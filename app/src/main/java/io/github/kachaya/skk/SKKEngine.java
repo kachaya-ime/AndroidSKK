@@ -306,13 +306,14 @@ public class SKKEngine {
 
     /**
      * かなキー（Ctrl-J）入力を処理し、確定モード・ひらがなモードへ戻します。
+     * 進行中のローマ字変換や漢字変換を強制終了し、バッファをリセットして初期状態に復帰します。
      */
     public void handleKanaKey() {
         mConverter.flush();
         mState.finish(this);
-        boolean notHiraganaState = (mState != SKKStateDirect.INSTANCE);
-        boolean notHiraganaMode = (mMode != SKKModeFullHiragana.INSTANCE);
-        if (notHiraganaState || notHiraganaMode) {
+        // 状態を強制的に確定モードへ戻し、バッファをリセットする
+        changeState(SKKStateDirect.INSTANCE);
+        if (mMode != SKKModeFullHiragana.INSTANCE) {
             changeMode(SKKModeFullHiragana.INSTANCE, false);
         }
         updateComposingText();
@@ -560,13 +561,14 @@ public class SKKEngine {
     }
 
     /**
-     * 候補表示ビューのタップ等により、手動で項目が選択された際の処理を行います。
+     * 候補一覧ビューから特定の候補が手動で選択（タップ）された際の処理を行います。
+     * 現在の状態が変換中（▼）であれば漢字候補を、入力中（▽）であれば補完候補を選択します。
      *
      * @param index 選択された項目のインデックス
      */
     public void pickCandidateViewManually(int index) {
         if (mState.isConverting()) {
-            pickCandidate(mCurrentCandidateIndex);
+            pickCandidate(index);
             updateComposingText();
         } else {
             boolean isAbbrev = (mState == SKKStateAbbrev.INSTANCE);
@@ -1150,15 +1152,27 @@ public class SKKEngine {
     }
 
     /**
-     * エンジンの内部バッファと表示をリセットします。
+     * エンジンの内部状態（バッファ、変換候補、登録スタック等）をすべて初期化します。
+     * 辞書以外の実行時キャッシュをクリアし、初期の確定モード（Direct）へ戻る準備を整えます。
      */
     public void reset() {
         mConverter.reset();
         mHeadword.setLength(0);
         mOkurigana = null;
         mOkuriConsonant = null;
+        clearCandidates();
+        mRegistrationStack.clear();
+    }
+
+    /**
+     * 漢字変換候補および補完候補のリストをクリアし、候補一覧ビューを非表示にします。
+     * 状態遷移時や、入力をキャンセルしてクリーンアップが必要な際に呼び出されます。
+     */
+    public void clearCandidates() {
         mCandidateList = Collections.emptyList();
         mSuggestionList = Collections.emptyList();
+        mCurrentCandidateIndex = 0;
+        mCurrentSuggestionIndex = 0;
         mService.hideCandidatesView();
     }
 

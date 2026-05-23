@@ -246,32 +246,30 @@ enum SKKStateHeadwordConversion implements SKKState {
 
     /**
      * バックスペース処理が実行された後の状態遷移などを制御します。
-     * 見出し語入力状態（▽）へ戻ります。
+     * 見出し語の有無に応じて、見出し語入力状態（▽）または確定モードへ戻ります。
      *
      * @param context SKKエンジンのコンテキスト
      */
     @Override
     public void afterBackspace(SKKEngine context) {
         StringBuilder headword = context.getHeadword();
-        int len = headword.length();
-        if (len == 0) {
+        if (headword.length() == 0) {
             context.changeState(SKKStateDirect.INSTANCE);
         } else {
             context.changeState(SKKStateHeadword.INSTANCE);
-            context.updateSuggestions();
         }
     }
 
     /**
-     * 現在の入力操作を中断し、見出し語入力状態に戻ります。
+     * 現在の変換候補選択を中断し、見出し語入力状態（▽）に戻ります。
+     * 状態遷移に伴い、候補一覧は自動的に消去されます。
      *
      * @param context SKKエンジンのコンテキスト
      * @return 常に true
      */
     @Override
     public boolean handleCancel(SKKEngine context) {
-        beforeBackspace(context);
-        afterBackspace(context);
+        context.changeState(SKKStateHeadword.INSTANCE);
         return true;
     }
 
