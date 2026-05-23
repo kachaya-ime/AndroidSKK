@@ -1,12 +1,13 @@
 package io.github.kachaya.skk;
 
 import android.content.Context;
+import android.content.res.AssetFileDescriptor;
 import android.util.Log;
 
-import java.io.BufferedInputStream;
-import java.io.BufferedOutputStream;
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.ArrayList;
@@ -151,21 +152,22 @@ public class Dictionary {
         String dbFileName = mFilesDirPath + "/" + MAIN_DICT + ".db";
         File dbFile = new File(dbFileName);
 
-        BufferedInputStream bis = new BufferedInputStream(context.getResources().openRawResource(R.raw.skk_main_dict));
-        if (bis.available() == dbFile.length()) {
-            bis.close();
-            return;
+        try (AssetFileDescriptor afd = context.getResources().openRawResourceFd(R.raw.skk_main_dict)) {
+            if (afd != null && afd.getLength() == dbFile.length()) {
+                return;
+            }
+        } catch (Exception ignored) {
         }
 
-        BufferedOutputStream bos = new BufferedOutputStream(Files.newOutputStream(Paths.get(dbFileName)));
-        int size;
-        byte[] buf = new byte[16 * 1024];
-        while ((size = bis.read(buf, 0, buf.length)) > 0) {
-            bos.write(buf, 0, size);
+        try (InputStream is = context.getResources().openRawResource(R.raw.skk_main_dict);
+             OutputStream os = Files.newOutputStream(Paths.get(dbFileName))) {
+            byte[] buf = new byte[16 * 1024];
+            int size;
+            while ((size = is.read(buf)) > 0) {
+                os.write(buf, 0, size);
+            }
+            os.flush();
         }
-        bos.flush();
-        bos.close();
-        bis.close();
     }
 
     /**

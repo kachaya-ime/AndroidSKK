@@ -10,8 +10,8 @@ android {
         applicationId "io.github.kachaya.skk"
         minSdk 28
         targetSdk 31
-        versionCode 10102
-        versionName "1.1.0"
+        versionCode 10103
+        versionName "1.1.1"
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     }

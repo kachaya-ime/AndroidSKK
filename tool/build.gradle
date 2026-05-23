@@ -1,0 +1,38 @@
+plugins {
+    id 'java'
+    id 'application'
+}
+
+dependencies {
+    implementation files('../app/libs/jdbm-1.0.jar')
+}
+
+application {
+    mainClass = 'io.github.kachaya.skk.DictGenerator'
+}
+
+jar {
+    manifest {
+        attributes 'Main-Class': 'io.github.kachaya.skk.DictGenerator'
+    }
+    from {
+        configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) }
+    }
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+}
+
+tasks.register('runSudachiDictConverter', JavaExec) {
+    group = 'application'
+    description = 'Runs the SudachiDictConverter tool'
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'io.github.kachaya.skk.SudachiDictConverter'
+    workingDir = rootProject.projectDir
+}
+
+tasks.register('runDictBuilder', JavaExec) {
+    group = 'application'
+    description = 'Runs the DictBuilder tool'
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'io.github.kachaya.skk.DictBuilder'
+    workingDir = rootProject.projectDir
+}
