@@ -175,11 +175,12 @@
       },
       {
         "label": "▴",
+        "weight": 1.25,
         "code": "UP"
       },
       {
         "label": "⇧",
-        "weight": 1.5,
+        "weight": 1.25,
         "code": "SHIFT"
       }
     ],
@@ -191,21 +192,22 @@
       },
       {
         "label": "⌴",
-        "weight": 8,
+        "weight": 8.25,
         "code": "SPACE"
       },
       {
         "label": "◂",
-        "weight": 1.5,
+        "weight": 1.25,
         "code": "LEFT"
       },
       {
         "label": "▾",
+        "weight": 1.25,
         "code": "DOWN"
       },
       {
         "label": "▸",
-        "weight": 1.5,
+        "weight": 1.25,
         "code": "RIGHT"
       }
     ]
@@ -386,11 +388,12 @@
       },
       {
         "label": "▴",
+        "weight": 1.25,
         "code": "UP"
       },
       {
         "label": "⇧",
-        "weight": 1.5,
+        "weight": 1.25,
         "code": "SHIFT"
       }
     ],
@@ -402,21 +405,22 @@
       },
       {
         "label": "⌴",
-        "weight": 8,
+        "weight": 8.25,
         "code": "SPACE"
       },
       {
         "label": "◂",
-        "weight": 1.5,
+        "weight": 1.25,
         "code": "LEFT"
       },
       {
         "label": "▾",
+        "weight": 1.25,
         "code": "DOWN"
       },
       {
         "label": "▸",
-        "weight": 1.5,
+        "weight": 1.25,
         "code": "RIGHT"
       }
     ]
