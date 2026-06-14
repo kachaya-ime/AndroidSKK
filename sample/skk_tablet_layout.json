@@ -1,0 +1,425 @@
+{
+  "custom_qwerty_layout_normal": [
+    [
+      {
+        "label": "`"
+      },
+      {
+        "label": "1"
+      },
+      {
+        "label": "2"
+      },
+      {
+        "label": "3"
+      },
+      {
+        "label": "4"
+      },
+      {
+        "label": "5"
+      },
+      {
+        "label": "6"
+      },
+      {
+        "label": "7"
+      },
+      {
+        "label": "8"
+      },
+      {
+        "label": "9"
+      },
+      {
+        "label": "0"
+      },
+      {
+        "label": "-"
+      },
+      {
+        "label": "="
+      },
+      {
+        "label": "⌫",
+        "weight": 1.5,
+        "code": "BACKSPACE"
+      }
+    ],
+    [
+      {
+        "label": "Tab",
+        "weight": 1.5,
+        "code": "TAB"
+      },
+      {
+        "label": "q"
+      },
+      {
+        "label": "w"
+      },
+      {
+        "label": "e"
+      },
+      {
+        "label": "r"
+      },
+      {
+        "label": "t"
+      },
+      {
+        "label": "y"
+      },
+      {
+        "label": "u"
+      },
+      {
+        "label": "i"
+      },
+      {
+        "label": "o"
+      },
+      {
+        "label": "p"
+      },
+      {
+        "label": "["
+      },
+      {
+        "label": "]"
+      },
+      {
+        "label": "\\"
+      }
+    ],
+    [
+      {
+        "label": "Ctrl",
+        "weight": 1.7000000476837158,
+        "code": "CTRL"
+      },
+      {
+        "label": "a"
+      },
+      {
+        "label": "s"
+      },
+      {
+        "label": "d"
+      },
+      {
+        "label": "f"
+      },
+      {
+        "label": "g"
+      },
+      {
+        "label": "h"
+      },
+      {
+        "label": "j"
+      },
+      {
+        "label": "k"
+      },
+      {
+        "label": "l"
+      },
+      {
+        "label": ";"
+      },
+      {
+        "label": "'"
+      },
+      {
+        "label": "⏎",
+        "weight": 1.7999999523162842,
+        "code": "ENTER"
+      }
+    ],
+    [
+      {
+        "label": "⇧",
+        "weight": 2,
+        "code": "SHIFT"
+      },
+      {
+        "label": "z"
+      },
+      {
+        "label": "x"
+      },
+      {
+        "label": "c"
+      },
+      {
+        "label": "v"
+      },
+      {
+        "label": "b"
+      },
+      {
+        "label": "n"
+      },
+      {
+        "label": "m"
+      },
+      {
+        "label": ","
+      },
+      {
+        "label": "."
+      },
+      {
+        "label": "\/"
+      },
+      {
+        "label": "▴",
+        "code": "UP"
+      },
+      {
+        "label": "⇧",
+        "weight": 1.5,
+        "code": "SHIFT"
+      }
+    ],
+    [
+      {
+        "label": "Ctrl",
+        "weight": 2.5,
+        "code": "CTRL"
+      },
+      {
+        "label": "⌴",
+        "weight": 8,
+        "code": "SPACE"
+      },
+      {
+        "label": "◂",
+        "weight": 1.5,
+        "code": "LEFT"
+      },
+      {
+        "label": "▾",
+        "code": "DOWN"
+      },
+      {
+        "label": "▸",
+        "weight": 1.5,
+        "code": "RIGHT"
+      }
+    ]
+  ],
+  "custom_qwerty_layout_shift": [
+    [
+      {
+        "label": "~"
+      },
+      {
+        "label": "!"
+      },
+      {
+        "label": "@"
+      },
+      {
+        "label": "#"
+      },
+      {
+        "label": "$"
+      },
+      {
+        "label": "%"
+      },
+      {
+        "label": "^"
+      },
+      {
+        "label": "&"
+      },
+      {
+        "label": "*"
+      },
+      {
+        "label": "("
+      },
+      {
+        "label": ")"
+      },
+      {
+        "label": "_"
+      },
+      {
+        "label": "+"
+      },
+      {
+        "label": "⌫",
+        "weight": 1.5,
+        "code": "BACKSPACE"
+      }
+    ],
+    [
+      {
+        "label": "Tab",
+        "weight": 1.5,
+        "code": "TAB"
+      },
+      {
+        "label": "Q"
+      },
+      {
+        "label": "W"
+      },
+      {
+        "label": "E"
+      },
+      {
+        "label": "R"
+      },
+      {
+        "label": "T"
+      },
+      {
+        "label": "Y"
+      },
+      {
+        "label": "U"
+      },
+      {
+        "label": "I"
+      },
+      {
+        "label": "O"
+      },
+      {
+        "label": "P"
+      },
+      {
+        "label": "{"
+      },
+      {
+        "label": "}"
+      },
+      {
+        "label": "|"
+      }
+    ],
+    [
+      {
+        "label": "Ctrl",
+        "weight": 1.7000000476837158,
+        "code": "CTRL"
+      },
+      {
+        "label": "A"
+      },
+      {
+        "label": "S"
+      },
+      {
+        "label": "D"
+      },
+      {
+        "label": "F"
+      },
+      {
+        "label": "G"
+      },
+      {
+        "label": "H"
+      },
+      {
+        "label": "J"
+      },
+      {
+        "label": "K"
+      },
+      {
+        "label": "L"
+      },
+      {
+        "label": ":"
+      },
+      {
+        "label": "`"
+      },
+      {
+        "label": "⏎",
+        "weight": 1.7999999523162842,
+        "code": "ENTER"
+      }
+    ],
+    [
+      {
+        "label": "⇧",
+        "weight": 2,
+        "code": "SHIFT"
+      },
+      {
+        "label": "Z"
+      },
+      {
+        "label": "X"
+      },
+      {
+        "label": "C"
+      },
+      {
+        "label": "V"
+      },
+      {
+        "label": "B"
+      },
+      {
+        "label": "N"
+      },
+      {
+        "label": "M"
+      },
+      {
+        "label": "<"
+      },
+      {
+        "label": "?"
+      },
+      {
+        "label": ">"
+      },
+      {
+        "label": "▴",
+        "code": "UP"
+      },
+      {
+        "label": "⇧",
+        "weight": 1.5,
+        "code": "SHIFT"
+      }
+    ],
+    [
+      {
+        "label": "Ctrl",
+        "weight": 2.5,
+        "code": "CTRL"
+      },
+      {
+        "label": "⌴",
+        "weight": 8,
+        "code": "SPACE"
+      },
+      {
+        "label": "◂",
+        "weight": 1.5,
+        "code": "LEFT"
+      },
+      {
+        "label": "▾",
+        "code": "DOWN"
+      },
+      {
+        "label": "▸",
+        "weight": 1.5,
+        "code": "RIGHT"
+      }
+    ]
+  ],
+  "custom_qwerty_layout_symbol": []
+}
