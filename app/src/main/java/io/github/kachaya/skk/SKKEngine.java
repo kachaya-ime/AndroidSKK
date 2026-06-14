@@ -84,9 +84,20 @@ public class SKKEngine {
     private boolean mUseJisx0201Kana = false;
     /** 設定により ユーザー辞書への学習機能をを有効にするかどうか。 */
     private boolean mEnableLearning = true;
+    /** 候補選択が最後に達したときに辞書登録するかどうか。 */
+    private boolean mRegisterOnLastCandidate = true;
     /** 直近の正常な確定情報（再変換用）。 */
     private ConversionInfo mLastConversion = null;
 
+
+    /**
+     * 現在の入力モードを取得します。
+     *
+     * @return 現在の {@link SKKMode}
+     */
+    SKKMode getMode() {
+        return mMode;
+    }
 
     /**
      * SKKEngine を構築します。
@@ -142,6 +153,7 @@ public class SKKEngine {
         mDisplayState = prefs.getBoolean("display_state", true);
         mUseJisx0201Kana = prefs.getBoolean("use_jisx0201_kana", false);
         mEnableLearning = prefs.getBoolean("enable_learning", true);
+        mRegisterOnLastCandidate = prefs.getBoolean("register_on_last_candidate", true);
 
         logI("readPrefs: useKutenJp =" + useKutenJp);
         logI("readPrefs: useToutenJp =" + useToutenJp);
@@ -351,27 +363,28 @@ public class SKKEngine {
      * @return 1 文字以上削除し、イベントを消費した場合は true
      */
     public boolean handleBackspace() {
-        mState.beforeBackspace(this);
+        SKKState state = mState;
+        state.beforeBackspace(this);
 
         // 1. ローマ字変換エンジンの未確定バッファ ('k' まで打った状態など) を優先して消す
         if (mConverter.handleBackspace()) {
-            mState.afterBackspace(this);
+            state.afterBackspace(this);
             updateComposingText();
             return true;
         }
 
         // 2. 状態（State）側での削除処理（見出し語（Headword）の末尾削除、変換キャンセルなど）
-        if (mState.processBackspace(this)) {
-            mState.afterBackspace(this);
+        if (state.processBackspace(this)) {
+            state.afterBackspace(this);
             updateComposingText();
             return true;
         }
 
         // 3. 一時的な状態（▽モード等）が空になった場合の自動差し戻し判定
-        if (!mState.isTransient()) {
+        if (!state.isTransient()) {
             return false;
         }
-        mState.afterBackspace(this);
+        state.afterBackspace(this);
 
         updateComposingText();
         return true;
@@ -529,7 +542,7 @@ public class SKKEngine {
 
         int listSize = mCandidateList.size();
         if (nextIndex > listSize - 1) {
-            if (mEnableLearning) {
+            if (mEnableLearning && mRegisterOnLastCandidate) {
                 boolean isAbbrevChoose = (mState == SKKStateAbbrevConversion.INSTANCE);
                 registerStart(isAbbrevChoose);
             } else {
@@ -862,6 +875,8 @@ public class SKKEngine {
      * @return 候補が見つかり提示を開始した場合は true
      */
     boolean showDynamicCandidates(String key) {
+        if (key == null) return false;
+
         List<Candidate> list = new ArrayList<>();
         LocalDateTime now = LocalDateTime.now();
 
@@ -896,6 +911,7 @@ public class SKKEngine {
         mCandidateList = list;
         mCurrentCandidateIndex = 0;
         updateCandidates();
+        updateComposingText();
         return true;
     }
 
@@ -1046,9 +1062,11 @@ public class SKKEngine {
         }
 
         // 動的に生成された候補（学習不要な候補）は辞書登録（学習）をスキップする
-        // 段階的な反映として, まずは候補選択からの確定時のみ学習設定をチェックする
         if (mEnableLearning && !c.isDynamic && c.rawCandidate != null) {
+            logI("Learning: key=" + key + ", cand=" + c.rawCandidate);
             mDictionary.addEntry(key, c.rawCandidate, mOkurigana);
+        } else {
+            logI("Skip learning: enable=" + mEnableLearning + ", dynamic=" + c.isDynamic + ", raw=" + (c.rawCandidate != null));
         }
 
         if (mRegistrationStack.isEmpty()) {
@@ -1156,12 +1174,20 @@ public class SKKEngine {
      * 辞書以外の実行時キャッシュをクリアし、初期の確定モード（Direct）へ戻る準備を整えます。
      */
     public void reset() {
+        clearBuffers();
+        mRegistrationStack.clear();
+    }
+
+    /**
+     * 入力バッファや変換候補などの一時的な状態をクリアします。
+     * 単語登録スタック（mRegistrationStack）は維持されます。
+     */
+    public void clearBuffers() {
         mConverter.reset();
         mHeadword.setLength(0);
         mOkurigana = null;
         mOkuriConsonant = null;
         clearCandidates();
-        mRegistrationStack.clear();
     }
 
     /**

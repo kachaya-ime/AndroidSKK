@@ -63,9 +63,7 @@ public class Dictionary {
      * @param msg ログメッセージ
      */
     private void logI(String msg) {
-        if (BuildConfig.DEBUG) {
-            Log.i("Dictionary", msg);
-        }
+        Log.i("Dictionary", msg);
     }
 
     /**
@@ -344,6 +342,9 @@ public class Dictionary {
 
     /**
      * ユーザー辞書から指定された見出し語に対応するエントリを読み込み、構造化します。
+     * <p>
+     * 空文字の混入によるデータ破損を防ぐため、パース時に厳密なフィルタリングを行います。
+     * </p>
      *
      * @param key 見出し語
      * @return 構造化されたエントリ。存在しない場合は null。
@@ -362,7 +363,7 @@ public class Dictionary {
         String[] va_array = value.substring(1).split("/");
         List<String> cd = new ArrayList<>();
         for (String str : va_array) {
-            if (str.startsWith("[")) {
+            if (str.isEmpty() || str.startsWith("[")) {
                 break;
             }
             cd.add(str);
@@ -377,8 +378,14 @@ public class Dictionary {
                 }
                 String[] va_array2 = va_array[i].split("/");
                 List<String> tmp_okr = new ArrayList<>();
-                Collections.addAll(tmp_okr, va_array2);
-                okr.add(tmp_okr);
+                for (String s : va_array2) {
+                    if (!s.isEmpty()) {
+                        tmp_okr.add(s);
+                    }
+                }
+                if (!tmp_okr.isEmpty()) {
+                    okr.add(tmp_okr);
+                }
             }
         }
         return new Entry(cd, okr);
@@ -434,6 +441,10 @@ public class Dictionary {
      * @param okuri 送り仮名。存在しない場合は null。
      */
     public void addEntry(String key, String val, String okuri) {
+        if (mBTreeUserDict == null || mRecManUserDict == null) {
+            Log.e("Dictionary", "User dictionary is not available for addEntry");
+            return;
+        }
         logI("addEntry: key=" + key + ", val=" + val + ", okuri=" + okuri);
 
         mOldKey = key;

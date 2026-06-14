@@ -24,6 +24,11 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        <activity
+            android:name=".KeyboardCustomizerActivity"
+            android:exported="false"
+            android:label="キー配列のカスタマイズ">
+        </activity>
 
         <service
             android:name=".InputService"

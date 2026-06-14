@@ -4,14 +4,14 @@ plugins {
 
 android {
     namespace 'io.github.kachaya.skk'
-    compileSdk 36
+    compileSdk 37
 
     defaultConfig {
         applicationId "io.github.kachaya.skk"
         minSdk 28
-        targetSdk 31
-        versionCode 10103
-        versionName "1.1.1"
+        targetSdk 36
+        versionCode 10200
+        versionName "1.2.0"
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -58,6 +58,7 @@ dependencies {
     implementation libs.preference
     implementation libs.activity
     implementation libs.constraintlayout
+    implementation libs.flexbox
     testImplementation libs.junit
     androidTestImplementation libs.ext.junit
     androidTestImplementation libs.espresso.core

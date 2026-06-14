@@ -4,7 +4,7 @@
     >
 
     <PreferenceCategory
-        android:title="入力・操作"
+        android:title="入力"
         app:iconSpaceReserved="false"
         />
     <SwitchPreference
@@ -18,6 +18,20 @@
         android:key="use_jisx0201_kana"
         android:summary="qキーの切り替えに半角カタカナを含めます"
         android:title="半角カタカナを使用する"
+        />
+    <SwitchPreference
+        android:defaultValue="true"
+        android:key="use_kuten_jp"
+        android:summaryOff="「.」で「．」を入力します"
+        android:summaryOn="「.」で「。」を入力します"
+        android:title="句点に「。」を使用する"
+        />
+    <SwitchPreference
+        android:defaultValue="true"
+        android:key="use_touten_jp"
+        android:summaryOff="「,」で「，」を入力します"
+        android:summaryOn="「,」で「、」を入力します"
+        android:title="読点に「、」を使用する"
         />
     <SwitchPreference
         android:defaultValue="false"
@@ -49,51 +63,57 @@
     <SwitchPreference
         android:defaultValue="true"
         android:key="input_single_line"
-        android:summaryOn="記号キーが隠れるように候補を同じ位置に表示します"
-        android:summaryOff="記号キーを隠さずに候補を記号キーの上段に表示します"
-        android:title="候補表示位置"
-        />
-
-    <PreferenceCategory
-        android:title="句読点・記号"
-        app:iconSpaceReserved="false"
-        />
-    <SwitchPreference
-        android:defaultValue="true"
-        android:key="use_kuten_jp"
-        android:summaryOff="「.」で「．」を入力します"
-        android:summaryOn="「.」で「。」を入力します"
-        android:title="句点に「。」を使用する"
-        />
-    <SwitchPreference
-        android:defaultValue="true"
-        android:key="use_touten_jp"
-        android:summaryOff="「,」で「，」を入力します"
-        android:summaryOn="「,」で「、」を入力します"
-        android:title="読点に「、」を使用する"
-        />
-    <EditTextPreference
-        android:defaultValue="@string/default_symbols_primary"
-        android:key="symbols_primary"
-        android:title="記号(プライマリー)"
-        app:useSimpleSummaryProvider="true"
-        />
-    <EditTextPreference
-        android:defaultValue="@string/default_symbols_secondary"
-        android:key="symbols_secondary"
-        android:title="記号(セカンダリー)"
-        app:useSimpleSummaryProvider="true"
-        />
-    <Preference
-        android:key="reset_symbols"
-        android:summary="入力した記号設定を初期状態にリセットします"
-        android:title="記号設定をデフォルトに戻す"
+        android:summaryOff="記号バーを隠さずに候補を記号バーの上段に表示します"
+        android:summaryOn="記号バーが隠れるように候補を同じ位置に表示します"
+        android:title="記号バー使用時の候補表示位置"
         />
 
     <PreferenceCategory
         android:title="画面キーボード"
         app:iconSpaceReserved="false"
         />
+    <ListPreference
+        android:defaultValue="qwerty"
+        android:entries="@array/keyboard_types"
+        android:entryValues="@array/keyboard_type_values"
+        android:key="keyboard_type"
+        android:title="キーボードの種類"
+        app:useSimpleSummaryProvider="true"
+        />
+    <Preference
+        android:key="keyboard_customizer_qwerty"
+        android:summary="QWERTYキーボードのキー配列をカスタマイズします"
+        android:title="QWERTYキー配列のカスタマイズ"
+        >
+        <intent
+            android:targetClass="io.github.kachaya.skk.KeyboardCustomizerActivity"
+            android:targetPackage="io.github.kachaya.skk"
+            >
+            <extra android:name="pref_key"
+                android:value="custom_qwerty_layout"
+                />
+            <extra android:name="title"
+                android:value="QWERTY配列のカスタマイズ"
+                />
+        </intent>
+    </Preference>
+    <Preference
+        android:key="symbols_customizer"
+        android:summary="記号バーのキー配列をカスタマイズします"
+        android:title="記号バーのカスタマイズ"
+        >
+        <intent
+            android:targetClass="io.github.kachaya.skk.KeyboardCustomizerActivity"
+            android:targetPackage="io.github.kachaya.skk"
+            >
+            <extra android:name="pref_key"
+                android:value="combined_symbols"
+                />
+            <extra android:name="title"
+                android:value="記号バーのカスタマイズ"
+                />
+        </intent>
+    </Preference>
     <SwitchPreference
         android:defaultValue="true"
         android:key="haptic_feedback"
@@ -111,6 +131,13 @@
         android:summary="変換結果をユーザー辞書に保存します"
         android:title="変換学習を有効にする"
         />
+    <SwitchPreference
+        android:defaultValue="true"
+        android:key="register_on_last_candidate"
+        android:summaryOff="最後の候補を超えたときに最初の候補に戻ります"
+        android:summaryOn="最後の候補を超えたときに辞書登録を開始します"
+        android:title="候補の最後で辞書登録する"
+        />
     <Preference
         android:summary="ユーザー辞書の登録・編集を行います"
         android:title="@string/title_dictionary_tool"
@@ -120,6 +147,26 @@
             android:targetPackage="io.github.kachaya.skk"
             />
     </Preference>
+
+    <PreferenceCategory
+        android:title="バックアップ・復元"
+        app:iconSpaceReserved="false"
+        />
+    <Preference
+        android:key="backup_settings"
+        android:summary="現在の設定をバックアップファイルに保存します"
+        android:title="設定のバックアップ"
+        />
+    <Preference
+        android:key="restore_settings"
+        android:summary="保存したバックアップファイルから設定を復元します"
+        android:title="設定の復元"
+        />
+    <Preference
+        android:key="reset_settings"
+        android:summary="設定を初期状態に戻します（学習辞書は初期化されません）"
+        android:title="設定の初期化"
+        />
 
     <PreferenceCategory
         android:title="アプリ情報"

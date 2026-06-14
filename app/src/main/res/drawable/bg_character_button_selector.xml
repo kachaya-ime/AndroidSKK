@@ -24,6 +24,14 @@
             </shape>
         </item>
 
+        <!-- 選択時（トグル有効時） -->
+        <item android:state_selected="true">
+            <shape android:shape="rectangle">
+                <solid android:color="@color/character_button_bg_pressed" />
+                <corners android:radius="4dp" />
+            </shape>
+        </item>
+
         <!-- 通常時 -->
         <item>
             <shape android:shape="rectangle">

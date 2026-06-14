@@ -78,6 +78,13 @@ enum SKKStateAbbrev implements SKKState {
                     context.abbrevConversionStart();
                 }
                 break;
+            case '>':
+                // "today", "date", "now" 等のキーワード判定を行い、動的候補を表示
+                if (context.showDynamicCandidates(headword.toString())) {
+                    return true;
+                }
+                headword.append('>');
+                break;
             case '.':
                 context.pickCurrentSuggestion();
                 break;

@@ -178,14 +178,14 @@ enum SKKStateDirect implements SKKState {
 
     /**
      * 確定モードに遷移した際の初期化処理を行います。
-     * 進行中のローマ字変換バッファ、変換候補、補完リスト、および単語登録スタックをすべてリセットし、
-     * クリーンな直接入力状態を構築します。
+     * 進行中のローマ字変換バッファ、変換候補、補完リストをリセットし、
+     * クリーンな直接入力状態を構築します。単語登録スタックは維持されます。
      *
      * @param context SKKエンジンのコンテキスト
      */
     @Override
     public void onEnterState(SKKEngine context) {
-        context.reset();
+        context.clearBuffers();
     }
 
     /**
@@ -277,13 +277,25 @@ enum SKKStateDirect implements SKKState {
 
     /**
      * バックスペースキーによる削除処理を行います。
-     * 確定モードでは SKK 側で文字を保持しないため、常に false を返してシステムに処理を委譲します。
+     * 単語登録中の場合は、登録バッファの末尾を 1 文字削除します。
+     * バッファが空の状態で押された場合は、単語登録をキャンセルして前の状態に戻ります。
      *
      * @param context SKKエンジンのコンテキスト
-     * @return 常に false
+     * @return 削除イベントを消費した場合は true
      */
     @Override
     public boolean processBackspace(SKKEngine context) {
+        if (!context.isRegistrationStackEmpty()) {
+            SKKEngine.RegistrationInfo regInfo = context.peekRegistrationInfo();
+            int len = regInfo.entry.length();
+            if (len > 0) {
+                regInfo.entry.deleteCharAt(len - 1);
+            } else {
+                // バッファが空なら登録自体をキャンセル
+                context.cancelRegister();
+            }
+            return true;
+        }
         return false;
     }
 

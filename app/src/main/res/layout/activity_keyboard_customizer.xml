@@ -1,0 +1,103 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:fitsSystemWindows="true">
+
+    <RadioGroup
+        android:id="@+id/mode_selector"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center"
+        android:padding="4dp">
+        <RadioButton
+            android:id="@+id/radio_normal"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="通常"
+            android:checked="true"/>
+        <RadioButton
+            android:id="@+id/radio_shift"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Shift"/>
+        <RadioButton
+            android:id="@+id/radio_symbol"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="記号"/>
+    </RadioGroup>
+
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:fillViewport="true">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:background="#191C1E">
+
+            <LinearLayout
+                android:id="@+id/keyboard_preview_container"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:background="#121416">
+                <!-- 編集中のキーボードがここに表示される -->
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/delete_zone"
+                android:layout_width="match_parent"
+                android:layout_height="64dp"
+                android:background="#1A2C2C"
+                android:gravity="center"
+                android:text="キーの追加：下のパレットからレイアウトにD&amp;D\nキーの削除：レイアウトからここにD&amp;D"
+                android:textColor="#FFFFFF"
+                android:visibility="visible" />
+
+            <com.google.android.material.tabs.TabLayout
+                android:id="@+id/palette_tabs"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="#191C1E"
+                app:tabTextColor="#666666"
+                app:tabSelectedTextColor="#FFFFFF"
+                app:tabIndicatorColor="#FFFFFF"
+                app:tabMode="fixed" />
+
+            <com.google.android.flexbox.FlexboxLayout
+                android:id="@+id/key_palette_special"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                app:flexWrap="wrap"
+                app:flexDirection="row"
+                app:justifyContent="center" />
+
+            <com.google.android.flexbox.FlexboxLayout
+                android:id="@+id/key_palette_alpha"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                app:flexWrap="wrap"
+                app:flexDirection="row"
+                app:justifyContent="center"
+                android:visibility="gone" />
+
+            <com.google.android.flexbox.FlexboxLayout
+                android:id="@+id/key_palette_other"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                app:flexWrap="wrap"
+                app:flexDirection="row"
+                app:justifyContent="center"
+                android:visibility="gone" />
+        </LinearLayout>
+    </ScrollView>
+
+</LinearLayout>

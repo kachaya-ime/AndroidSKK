@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string-array name="keyboard_types">
+        <item>記号バー</item>
+        <item>QWERTY</item>
+    </string-array>
+    <string-array name="keyboard_type_values">
+        <item>symbols</item>
+        <item>qwerty</item>
+    </string-array>
+</resources>

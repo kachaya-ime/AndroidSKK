@@ -209,31 +209,28 @@ enum SKKStateHeadword implements SKKState {
             return false;
         }
 
+        if (text.endsWith(">") || text.endsWith("<") || text.endsWith("?")) {
+            char trigger = text.charAt(text.length() - 1);
+            StringBuilder headwordBuffer = context.getHeadword();
+
+            // トリガー文字の前の残り（'y' など）があれば見出し語に追加
+            if (text.length() > 1) {
+                headwordBuffer.append(text.substring(0, text.length() - 1));
+            }
+
+            String headwordStr = headwordBuffer.toString();
+            // "today", "date", "now" 等のキーワード判定を行い、動的候補を表示
+            if (context.showDynamicCandidates(headwordStr)) {
+                return true;
+            }
+            // キーワードでなければ辞書検索（接頭辞・接尾辞として ">" を付与）
+            headwordBuffer.append('>');
+            context.conversionStart();
+            return true;
+        }
+
         switch (text) {
             case "q": // DDSKK 仕様: 見出し語入力中に q でカタカナ変換確定
-                StringBuilder headword = context.getHeadword();
-                if (headword.length() > 0) {
-                    // 現在のモードからトグルしたモード（通常はひらがな→カタカナ）で変換
-                    SKKMode toggledMode = context.getToggledKanaMode();
-                    CharSequence converted = toggledMode.convertText(headword);
-                    context.commitTextSKK(converted, 1);
-                }
-                context.changeState(SKKStateDirect.INSTANCE);
-                return true;
-            case ">": // DDSKK 仕様: 接頭辞・接尾辞・動的情報の挿入
-            case "<":
-            case "?":
-                StringBuilder headwordBuffer = context.getHeadword();
-                String headwordStr = headwordBuffer.toString();
-                // "today", "date", "now" 等のキーワード判定を行い、動的候補を表示
-                if (context.showDynamicCandidates(headwordStr)) {
-                    return true;
-                }
-                // キーワードでなければ辞書検索（接頭辞・接尾辞として ">" を付与）
-                headwordBuffer.append('>');
-                context.conversionStart();
-                return true;
-            case ".":
                 // 選択中の補完候補（Suggestion）を確定
                 context.pickCurrentSuggestion();
                 return true;

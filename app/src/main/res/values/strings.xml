@@ -2,7 +2,4 @@
     <string name="app_name">AndroidSKK for PKB</string>
     <string name="title_activity_settings">AndroidSKK for PKB の設定</string>
     <string name="title_dictionary_tool">SKK辞書ツール</string>
-    <!-- 記号のデフォルト値 -->
-    <string name="default_symbols_primary">~{}&lt;&gt;[],.-</string>
-    <string name="default_symbols_secondary">`^|\\%&amp;$¥;=</string>
 </resources>

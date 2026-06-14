@@ -42,7 +42,7 @@
     <color name="button_bg_pressed">@color/neutral_variant_40</color>
 
     <!-- ボタンの前景色 -->
-    <color name="function_button_fg">@color/function_fg_tint</color>
+    <color name="function_button_fg">@color/neutral_variant_90</color>
     <color name="character_button_fg">@color/neutral_variant_90</color>
     <color name="candidate_button_fg">@color/neutral_variant_70</color>
     <color name="candidate_user_dict_fg">@color/neutral_variant_90</color>

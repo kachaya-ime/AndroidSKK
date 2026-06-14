@@ -7,6 +7,7 @@ import android.graphics.RectF;
 import android.inputmethodservice.InputMethodService;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.SystemClock;
 import android.text.InputType;
 import android.util.Log;
 import android.view.Gravity;
@@ -107,19 +108,46 @@ public class InputService extends InputMethodService implements SharedPreference
 
     /**
      * サービスの生成時に呼び出されます。
-     * 変換エンジン、辞書の初期化、および設定変更リスナーの登録を行います。
+     * 初期設定の適用、変換エンジン、辞書の初期化、および設定変更リスナーの登録を行います。
      */
     @Override
     public void onCreate() {
         logI("onCreate()");
         super.onCreate();
+
+        // 初期設定の一括適用
+        setupDefaultPreferences(this);
+
+        mPrefs = PreferenceManager.getDefaultSharedPreferences(this);
         mDictionary = new Dictionary(this);
         mEngine = new SKKEngine(this, mDictionary);
 
-        // 設定変更をリアルタイムに検知するために登録
-        mPrefs = PreferenceManager.getDefaultSharedPreferences(this);
-        mPrefs.registerOnSharedPreferenceChangeListener(this);
+        // 設定の初期読み込み
         readPrefs();
+        // 設定変更をリアルタイムに検知するために登録
+        mPrefs.registerOnSharedPreferenceChangeListener(this);
+    }
+
+    /**
+     * 初回起動時や設定未初期化時に、デフォルト値を一括適用します。
+     * 物理キーボードの有無による動的な判定を XML のデフォルト値より優先させます。
+     */
+    public static void setupDefaultPreferences(android.content.Context context) {
+        SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(context);
+
+        // 1. 動的なデフォルト判定（XMLの static な値より先に処理して優先させる）
+        if (!prefs.contains("keyboard_type")) {
+            android.content.res.Configuration config = context.getResources().getConfiguration();
+            boolean hasHardwareKeyboard = (config.keyboard != android.content.res.Configuration.KEYBOARD_NOKEYS &&
+                    config.keyboard != android.content.res.Configuration.KEYBOARD_UNDEFINED);
+            String defaultType = hasHardwareKeyboard ? "symbols" : "qwerty";
+
+            // commit() を使用して、直後の setDefaultValues がこの値を認識できるようにする
+            prefs.edit().putString("keyboard_type", defaultType).commit();
+        }
+
+        // 2. その他の静的なデフォルト値を XML から適用（既存の設定は壊さない）
+        PreferenceManager.setDefaultValues(context, R.xml.root_preferences, false);
     }
 
     /**
@@ -680,6 +708,99 @@ public class InputService extends InputMethodService implements SharedPreference
             return;
         }
         mEngine.processKey(code);
+    }
+
+    /**
+     * バックスペース処理を実行します。
+     */
+    void handleBackspace() {
+        if (isInputDisabled()) return;
+        if (!mEngine.handleBackspace()) {
+            sendDownUpKeyEvents(KeyEvent.KEYCODE_DEL);
+        }
+    }
+
+    /**
+     * エンターキー処理を実行します。
+     */
+    void handleEnter() {
+        if (isInputDisabled()) return;
+        if (!mEngine.handleEnter()) {
+            sendDownUpKeyEvents(KeyEvent.KEYCODE_ENTER);
+        }
+    }
+
+    /**
+     * かなモードの切り替えを実行します。
+     */
+    void handleToggleKana() {
+        if (isInputDisabled()) return;
+        mEngine.toggleKana();
+    }
+
+    /**
+     * ひらがなモードへの復帰を実行します。
+     */
+    void handleKanaKey() {
+        if (isInputDisabled()) return;
+        mEngine.handleKanaKey();
+    }
+
+    /**
+     * キーボードの「モード」ボタン押下時の処理。
+     * 英数モードならひらがなへ、かなモードなら相互に切り替えます。
+     */
+    void handleModeButton() {
+        if (isInputDisabled()) return;
+        if (mEngine.getMode() == SKKModeHalfLatin.INSTANCE) {
+            mEngine.handleKanaKey();
+        } else {
+            mEngine.toggleKana();
+        }
+    }
+
+    /**
+     * Ctrl キーとの組み合わせ入力を処理します。
+     *
+     * @param keyCode KeyEvent で定義されているキーコード
+     */
+    void handleCtrlKey(int keyCode) {
+        if (isInputDisabled()) return;
+        if (!mEngine.processCtrlKey(keyCode)) {
+            // エンジンで消費されなかった場合は、Ctrl キーとの組み合わせとしてシステムに送信
+            InputConnection ic = getCurrentInputConnection();
+            if (ic != null) {
+                long now = SystemClock.uptimeMillis();
+                ic.sendKeyEvent(new KeyEvent(now, now, KeyEvent.ACTION_DOWN, keyCode, 0,
+                        KeyEvent.META_CTRL_ON | KeyEvent.META_CTRL_LEFT_ON));
+                ic.sendKeyEvent(new KeyEvent(now, now, KeyEvent.ACTION_UP, keyCode, 0,
+                        KeyEvent.META_CTRL_ON | KeyEvent.META_CTRL_LEFT_ON));
+            }
+        }
+    }
+
+    /**
+     * Tab キー入力を処理します。
+     *
+     * @param isShifted Shift 状態かどうか
+     */
+    void handleTab(boolean isShifted) {
+        if (isInputDisabled()) return;
+        if (!mEngine.processTab(isShifted)) {
+            sendDownUpKeyEvents(KeyEvent.KEYCODE_TAB);
+        }
+    }
+
+    /**
+     * D-Pad（カーソルキー）操作を処理します。
+     *
+     * @param keyCode KeyEvent で定義されているキーコード
+     */
+    void handleDpad(int keyCode) {
+        if (isInputDisabled()) return;
+        if (!mEngine.handleDpad(keyCode)) {
+            sendDownUpKeyEvents(keyCode);
+        }
     }
 
     /**

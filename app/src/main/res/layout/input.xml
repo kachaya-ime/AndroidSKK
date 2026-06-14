@@ -25,8 +25,8 @@
     <LinearLayout
         android:id="@+id/keyboard_layout"
         android:layout_width="match_parent"
-        android:layout_height="@dimen/button_height"
-        android:orientation="horizontal">
+        android:layout_height="wrap_content"
+        android:orientation="vertical">
         <!-- Java側でボタンが動的に追加される -->
     </LinearLayout>
 </LinearLayout>
