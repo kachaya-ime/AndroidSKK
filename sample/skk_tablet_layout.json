@@ -1,429 +1,221 @@
 {
   "custom_qwerty_layout_normal": [
     [
-      {
-        "label": "`"
-      },
-      {
-        "label": "1"
-      },
-      {
-        "label": "2"
-      },
-      {
-        "label": "3"
-      },
-      {
-        "label": "4"
-      },
-      {
-        "label": "5"
-      },
-      {
-        "label": "6"
-      },
-      {
-        "label": "7"
-      },
-      {
-        "label": "8"
-      },
-      {
-        "label": "9"
-      },
-      {
-        "label": "0"
-      },
-      {
-        "label": "-"
-      },
-      {
-        "label": "="
-      },
-      {
-        "label": "⌫",
-        "weight": 1.5,
-        "code": "BACKSPACE"
-      }
+      { "label": "`" },
+      { "label": "1" },
+      { "label": "2" },
+      { "label": "3" },
+      { "label": "4" },
+      { "label": "5" },
+      { "label": "6" },
+      { "label": "7" },
+      { "label": "8" },
+      { "label": "9" },
+      { "label": "0" },
+      { "label": "-" },
+      { "label": "=" },
+      { "label": "⌫", "code": "BACKSPACE", "weight": 1.5 }
     ],
     [
-      {
-        "label": "Tab",
-        "weight": 1.5,
-        "code": "TAB"
-      },
-      {
-        "label": "q"
-      },
-      {
-        "label": "w"
-      },
-      {
-        "label": "e"
-      },
-      {
-        "label": "r"
-      },
-      {
-        "label": "t"
-      },
-      {
-        "label": "y"
-      },
-      {
-        "label": "u"
-      },
-      {
-        "label": "i"
-      },
-      {
-        "label": "o"
-      },
-      {
-        "label": "p"
-      },
-      {
-        "label": "["
-      },
-      {
-        "label": "]"
-      },
-      {
-        "label": "\\"
-      }
+      { "label": "Tab", "code": "TAB", "weight": 1.5 },
+      { "label": "q" },
+      { "label": "w" },
+      { "label": "e" },
+      { "label": "r" },
+      { "label": "t" },
+      { "label": "y" },
+      { "label": "u" },
+      { "label": "i" },
+      { "label": "o" },
+      { "label": "p" },
+      { "label": "[" },
+      { "label": "]" },
+      { "label": "\\" }
     ],
     [
-      {
-        "label": "Ctrl",
-        "weight": 1.7000000476837158,
-        "code": "CTRL"
-      },
-      {
-        "label": "a"
-      },
-      {
-        "label": "s"
-      },
-      {
-        "label": "d"
-      },
-      {
-        "label": "f"
-      },
-      {
-        "label": "g"
-      },
-      {
-        "label": "h"
-      },
-      {
-        "label": "j"
-      },
-      {
-        "label": "k"
-      },
-      {
-        "label": "l"
-      },
-      {
-        "label": ";"
-      },
-      {
-        "label": "'"
-      },
-      {
-        "label": "⏎",
-        "weight": 1.7999999523162842,
-        "code": "ENTER"
-      }
+      { "label": "Ctrl", "code": "CTRL", "weight": 1.75 },
+      { "label": "a" },
+      { "label": "s" },
+      { "label": "d" },
+      { "label": "f" },
+      { "label": "g" },
+      { "label": "h" },
+      { "label": "j" },
+      { "label": "k" },
+      { "label": "l" },
+      { "label": ";" },
+      { "label": "'" },
+      { "label": "⏎", "code": "ENTER", "weight": 1.75 }
     ],
     [
-      {
-        "label": "⇧",
-        "weight": 2,
-        "code": "SHIFT"
-      },
-      {
-        "label": "z"
-      },
-      {
-        "label": "x"
-      },
-      {
-        "label": "c"
-      },
-      {
-        "label": "v"
-      },
-      {
-        "label": "b"
-      },
-      {
-        "label": "n"
-      },
-      {
-        "label": "m"
-      },
-      {
-        "label": ","
-      },
-      {
-        "label": "."
-      },
-      {
-        "label": "\/"
-      },
-      {
-        "label": "▴",
-        "weight": 1.25,
-        "code": "UP"
-      },
-      {
-        "label": "⇧",
-        "weight": 1.25,
-        "code": "SHIFT"
-      }
+      { "label": "⇧", "code": "SHIFT", "weight": 2.0 },
+      { "label": "z" },
+      { "label": "x" },
+      { "label": "c" },
+      { "label": "v" },
+      { "label": "b" },
+      { "label": "n" },
+      { "label": "m" },
+      { "label": "," },
+      { "label": "." },
+      { "label": "/" },
+      { "label": "▴", "code": "UP", "weight": 1.25 },
+      { "label": "⇧", "code": "SHIFT", "weight": 1.25 }
     ],
     [
-      {
-        "label": "Ctrl",
-        "weight": 2.5,
-        "code": "CTRL"
-      },
-      {
-        "label": "⌴",
-        "weight": 8.25,
-        "code": "SPACE"
-      },
-      {
-        "label": "◂",
-        "weight": 1.25,
-        "code": "LEFT"
-      },
-      {
-        "label": "▾",
-        "weight": 1.25,
-        "code": "DOWN"
-      },
-      {
-        "label": "▸",
-        "weight": 1.25,
-        "code": "RIGHT"
-      }
+      { "label": "Ctrl", "code": "CTRL", "weight": 1.75 },
+      { "label": "Sym", "code": "SYM", "weight": 2.0 },
+      { "label": "⌴", "code": "SPACE", "weight": 7.0 },
+      { "label": "◂", "code": "LEFT", "weight": 1.25 },
+      { "label": "▾", "code": "DOWN", "weight": 1.25 },
+      { "label": "▸", "code": "RIGHT", "weight": 1.25 }
     ]
   ],
   "custom_qwerty_layout_shift": [
     [
-      {
-        "label": "~"
-      },
-      {
-        "label": "!"
-      },
-      {
-        "label": "@"
-      },
-      {
-        "label": "#"
-      },
-      {
-        "label": "$"
-      },
-      {
-        "label": "%"
-      },
-      {
-        "label": "^"
-      },
-      {
-        "label": "&"
-      },
-      {
-        "label": "*"
-      },
-      {
-        "label": "("
-      },
-      {
-        "label": ")"
-      },
-      {
-        "label": "_"
-      },
-      {
-        "label": "+"
-      },
-      {
-        "label": "⌫",
-        "weight": 1.5,
-        "code": "BACKSPACE"
-      }
+      { "label": "~" },
+      { "label": "!" },
+      { "label": "@" },
+      { "label": "#" },
+      { "label": "$" },
+      { "label": "%" },
+      { "label": "^" },
+      { "label": "&" },
+      { "label": "*" },
+      { "label": "(" },
+      { "label": ")" },
+      { "label": "_" },
+      { "label": "+" },
+      { "label": "⌫", "code": "BACKSPACE", "weight": 1.5 }
     ],
     [
-      {
-        "label": "Tab",
-        "weight": 1.5,
-        "code": "TAB"
-      },
-      {
-        "label": "Q"
-      },
-      {
-        "label": "W"
-      },
-      {
-        "label": "E"
-      },
-      {
-        "label": "R"
-      },
-      {
-        "label": "T"
-      },
-      {
-        "label": "Y"
-      },
-      {
-        "label": "U"
-      },
-      {
-        "label": "I"
-      },
-      {
-        "label": "O"
-      },
-      {
-        "label": "P"
-      },
-      {
-        "label": "{"
-      },
-      {
-        "label": "}"
-      },
-      {
-        "label": "|"
-      }
+      { "label": "Tab", "code": "TAB", "weight": 1.5 },
+      { "label": "Q" },
+      { "label": "W" },
+      { "label": "E" },
+      { "label": "R" },
+      { "label": "T" },
+      { "label": "Y" },
+      { "label": "U" },
+      { "label": "I" },
+      { "label": "O" },
+      { "label": "P" },
+      { "label": "{" },
+      { "label": "}" },
+      { "label": "|" }
     ],
     [
-      {
-        "label": "Ctrl",
-        "weight": 1.7000000476837158,
-        "code": "CTRL"
-      },
-      {
-        "label": "A"
-      },
-      {
-        "label": "S"
-      },
-      {
-        "label": "D"
-      },
-      {
-        "label": "F"
-      },
-      {
-        "label": "G"
-      },
-      {
-        "label": "H"
-      },
-      {
-        "label": "J"
-      },
-      {
-        "label": "K"
-      },
-      {
-        "label": "L"
-      },
-      {
-        "label": ":"
-      },
-      {
-        "label": "`"
-      },
-      {
-        "label": "⏎",
-        "weight": 1.7999999523162842,
-        "code": "ENTER"
-      }
+      { "label": "Ctrl", "code": "CTRL", "weight": 1.75 },
+      { "label": "A" },
+      { "label": "S" },
+      { "label": "D" },
+      { "label": "F" },
+      { "label": "G" },
+      { "label": "H" },
+      { "label": "J" },
+      { "label": "K" },
+      { "label": "L" },
+      { "label": ":" },
+      { "label": "\"" },
+      { "label": "⏎", "code": "ENTER", "weight": 1.75 }
     ],
     [
-      {
-        "label": "⇧",
-        "weight": 2,
-        "code": "SHIFT"
-      },
-      {
-        "label": "Z"
-      },
-      {
-        "label": "X"
-      },
-      {
-        "label": "C"
-      },
-      {
-        "label": "V"
-      },
-      {
-        "label": "B"
-      },
-      {
-        "label": "N"
-      },
-      {
-        "label": "M"
-      },
-      {
-        "label": "<"
-      },
-      {
-        "label": ">"
-      },
-      {
-        "label": "?"
-      },
-      {
-        "label": "▴",
-        "weight": 1.25,
-        "code": "UP"
-      },
-      {
-        "label": "⇧",
-        "weight": 1.25,
-        "code": "SHIFT"
-      }
+      { "label": "⇧", "code": "SHIFT", "weight": 2.0 },
+      { "label": "Z" },
+      { "label": "X" },
+      { "label": "C" },
+      { "label": "V" },
+      { "label": "B" },
+      { "label": "N" },
+      { "label": "M" },
+      { "label": "<" },
+      { "label": ">" },
+      { "label": "?" },
+      { "label": "▴", "code": "UP", "weight": 1.25 },
+      { "label": "⇧", "code": "SHIFT", "weight": 1.25 }
     ],
     [
-      {
-        "label": "Ctrl",
-        "weight": 2.5,
-        "code": "CTRL"
-      },
-      {
-        "label": "⌴",
-        "weight": 8.25,
-        "code": "SPACE"
-      },
-      {
-        "label": "◂",
-        "weight": 1.25,
-        "code": "LEFT"
-      },
-      {
-        "label": "▾",
-        "weight": 1.25,
-        "code": "DOWN"
-      },
-      {
-        "label": "▸",
-        "weight": 1.25,
-        "code": "RIGHT"
-      }
+      { "label": "Ctrl", "code": "CTRL", "weight": 1.75 },
+      { "label": "Sym", "code": "SYM", "weight": 2.0 },
+      { "label": "⌴", "code": "SPACE", "weight": 7.0 },
+      { "label": "◂", "code": "LEFT", "weight": 1.25 },
+      { "label": "▾", "code": "DOWN", "weight": 1.25 },
+      { "label": "▸", "code": "RIGHT", "weight": 1.25 }
     ]
   ],
-  "custom_qwerty_layout_symbol": []
+  "custom_qwerty_layout_symbol": [
+    [
+      { "label": "α" },
+      { "label": "β" },
+      { "label": "γ" },
+      { "label": "δ" },
+      { "label": "ε" },
+      { "label": "ζ" },
+      { "label": "η" },
+      { "label": "θ" },
+      { "label": "ι" },
+      { "label": "κ" },
+      { "label": "λ" },
+      { "label": "μ" },
+      { "label": "ν" },
+      { "label": "⌫", "code": "BACKSPACE", "weight": 1.5 }
+    ],
+    [
+      { "label": "Gap", "code": "GAP", "weight": 0.5 },
+      { "label": "ξ" },
+      { "label": "ο" },
+      { "label": "π" },
+      { "label": "ρ" },
+      { "label": "σ" },
+      { "label": "τ" },
+      { "label": "υ" },
+      { "label": "φ" },
+      { "label": "χ" },
+      { "label": "ψ" },
+      { "label": "ω" },
+      { "label": "„" },
+      { "label": "“" },
+      { "label": "¥" }
+    ],
+    [
+      { "label": "Gap", "code": "GAP", "weight": 0.75 },
+      { "label": "Γ" },
+      { "label": "Δ" },
+      { "label": "Θ" },
+      { "label": "Λ" },
+      { "label": "Π" },
+      { "label": "Σ" },
+      { "label": "Φ" },
+      { "label": "Χ" },
+      { "label": "Ψ" },
+      { "label": "Ω" },
+      { "label": "«" },
+      { "label": "»" },
+      { "label": "⏎", "code": "ENTER", "weight": 1.75 }
+    ],
+    [
+      { "label": "Gap", "code": "GAP" },
+      { "label": "±" },
+      { "label": "×" },
+      { "label": "÷" },
+      { "label": "≤" },
+      { "label": "≥" },
+      { "label": "≠" },
+      { "label": "µ" },
+      { "label": "°" },
+      { "label": "§" },
+      { "label": "©" },
+      { "label": "®" },
+      { "label": "▴", "code": "UP", "weight": 1.25 },
+      { "label": "Gap", "code": "GAP", "weight": 1.25 }
+    ],
+    [
+      { "label": "Gap", "code": "GAP", "weight": 1.75 },
+      { "label": "Sym", "code": "SYM", "weight": 2.0 },
+      { "label": "⌴", "code": "SPACE", "weight": 7.0 },
+      { "label": "◂", "code": "LEFT", "weight": 1.25 },
+      { "label": "▾", "code": "DOWN", "weight": 1.25 },
+      { "label": "▸", "code": "RIGHT", "weight": 1.25 }
+    ]
+  ]
 }

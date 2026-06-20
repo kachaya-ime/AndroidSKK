@@ -334,16 +334,14 @@ public class DictionaryTool extends AppCompatActivity {
             Intent resultData = result.getData();
             if (resultData != null) {
                 Uri uri = resultData.getData();
-                try {
-                    // 書き込み用ストリームを truncate モードで開く
-                    OutputStream outputStream = getContentResolver().openOutputStream(uri, "wt");
+                try (OutputStream outputStream = getContentResolver().openOutputStream(uri, "wt")) {
                     if (outputStream != null) {
-                        BufferedWriter writer = new BufferedWriter((new OutputStreamWriter(outputStream)));
-                        for (String entry : exportDictionary()) {
-                            writer.write(entry + "\n");
+                        try (BufferedWriter writer = new BufferedWriter((new OutputStreamWriter(outputStream)))) {
+                            for (String entry : exportDictionary()) {
+                                writer.write(entry + "\n");
+                            }
+                            writer.flush();
                         }
-                        writer.flush();
-                        writer.close();
                     }
                 } catch (Exception ignored) {
                 }

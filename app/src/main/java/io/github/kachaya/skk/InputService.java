@@ -238,6 +238,7 @@ public class InputService extends InputMethodService implements SharedPreference
                         if (mAutoAsciiMode) {
                             mEngine.toASCIIMode();
                         }
+                        break;
                     default:
                         break;
                 }
@@ -274,6 +275,8 @@ public class InputService extends InputMethodService implements SharedPreference
         logI("onStartInputView: restarting=" + restarting);
         super.onStartInputView(editorInfo, restarting);
         if (mInputView != null) {
+            // 表示される前に最新の設定（ファイルからのレイアウト等）を確実に読み込む
+            mInputView.readPrefs();
             mInputView.doStartInputView(editorInfo, restarting);
         }
     }
@@ -444,10 +447,35 @@ public class InputService extends InputMethodService implements SharedPreference
             return;
         }
 
-        View tv = mTooltipPopup.getContentView();
-        tv.measure(View.MeasureSpec.UNSPECIFIED, View.MeasureSpec.UNSPECIFIED);
-        int popupHeight = tv.getMeasuredHeight();
+        int[] coords = calculateTooltipCoordinates(mTooltipPopup.getContentView());
+        try {
+            mTooltipPopup.update(coords[0], coords[1], -1, -1);
+        } catch (Exception ignored) {
+        }
+    }
+
+    /**
+     * ツールチップの表示位置（IME ウィンドウ相対座標）を計算します。
+     *
+     * @param contentView ツールチップのコンテンツビュー
+     * @return {x, y} 座標の配列
+     */
+    private int[] calculateTooltipCoordinates(View contentView) {
+        contentView.measure(View.MeasureSpec.UNSPECIFIED, View.MeasureSpec.UNSPECIFIED);
+        int popupWidth = contentView.getMeasuredWidth();
+        int popupHeight = contentView.getMeasuredHeight();
         float density = getResources().getDisplayMetrics().density;
+        float caretHeight = mCursorBottom - mCursorTop;
+
+        // キャレットの高さが取得できている場合はそれを基準にオフセットを計算
+        int offsetDp = 30;
+        if (caretHeight > 0) {
+            // 行の高さの半分 + 15dp 程度を浮かせる（機種やフォントサイズへの適応）
+            offsetDp = (int) (caretHeight / density / 2) + 15;
+            if (offsetDp < 30) {
+                offsetDp = 30;
+            }
+        }
 
         // スクリーン座標を IME ウィンドウの相対座標に変換するための基準取得
         int[] locScreen = new int[2];
@@ -462,8 +490,10 @@ public class InputService extends InputMethodService implements SharedPreference
         int winX = locScreen[0] - locWindow[0];
         int winY = locScreen[1] - locWindow[1];
 
-        int x = (mComposingHorizontal != -1) ? (int) mComposingHorizontal : (int) mCursorHorizontal + (int) (4 * density);
-        int y = (int) mCursorTop - popupHeight - (int) (30 * density);
+        // 水平位置：キャレットの真上付近に中央寄せすることで、右上の重なりを避ける
+        float anchorX = (mComposingHorizontal != -1) ? mComposingHorizontal : mCursorHorizontal;
+        int x = (int) anchorX - (popupWidth / 2);
+        int y = (int) mCursorTop - popupHeight - (int) (offsetDp * density);
 
         // オフセット補正
         int finalX = x - winX;
@@ -475,10 +505,7 @@ public class InputService extends InputMethodService implements SharedPreference
             finalY = y;
         }
 
-        try {
-            mTooltipPopup.update(finalX, finalY, -1, -1);
-        } catch (Exception ignored) {
-        }
+        return new int[]{finalX, finalY};
     }
 
     /**
@@ -534,7 +561,9 @@ public class InputService extends InputMethodService implements SharedPreference
     @Override
     @SuppressLint("MissingSuperCall")
     public boolean onEvaluateInputViewShown() {
-        if (mIsInputTypeNull) return false;
+        if (mIsInputTypeNull) {
+            return false;
+        }
         return true;
     }
 
@@ -714,7 +743,9 @@ public class InputService extends InputMethodService implements SharedPreference
      * バックスペース処理を実行します。
      */
     void handleBackspace() {
-        if (isInputDisabled()) return;
+        if (isInputDisabled()) {
+            return;
+        }
         if (!mEngine.handleBackspace()) {
             sendDownUpKeyEvents(KeyEvent.KEYCODE_DEL);
         }
@@ -724,38 +755,11 @@ public class InputService extends InputMethodService implements SharedPreference
      * エンターキー処理を実行します。
      */
     void handleEnter() {
-        if (isInputDisabled()) return;
+        if (isInputDisabled()) {
+            return;
+        }
         if (!mEngine.handleEnter()) {
             sendDownUpKeyEvents(KeyEvent.KEYCODE_ENTER);
-        }
-    }
-
-    /**
-     * かなモードの切り替えを実行します。
-     */
-    void handleToggleKana() {
-        if (isInputDisabled()) return;
-        mEngine.toggleKana();
-    }
-
-    /**
-     * ひらがなモードへの復帰を実行します。
-     */
-    void handleKanaKey() {
-        if (isInputDisabled()) return;
-        mEngine.handleKanaKey();
-    }
-
-    /**
-     * キーボードの「モード」ボタン押下時の処理。
-     * 英数モードならひらがなへ、かなモードなら相互に切り替えます。
-     */
-    void handleModeButton() {
-        if (isInputDisabled()) return;
-        if (mEngine.getMode() == SKKModeHalfLatin.INSTANCE) {
-            mEngine.handleKanaKey();
-        } else {
-            mEngine.toggleKana();
         }
     }
 
@@ -765,7 +769,9 @@ public class InputService extends InputMethodService implements SharedPreference
      * @param keyCode KeyEvent で定義されているキーコード
      */
     void handleCtrlKey(int keyCode) {
-        if (isInputDisabled()) return;
+        if (isInputDisabled()) {
+            return;
+        }
         if (!mEngine.processCtrlKey(keyCode)) {
             // エンジンで消費されなかった場合は、Ctrl キーとの組み合わせとしてシステムに送信
             InputConnection ic = getCurrentInputConnection();
@@ -785,7 +791,9 @@ public class InputService extends InputMethodService implements SharedPreference
      * @param isShifted Shift 状態かどうか
      */
     void handleTab(boolean isShifted) {
-        if (isInputDisabled()) return;
+        if (isInputDisabled()) {
+            return;
+        }
         if (!mEngine.processTab(isShifted)) {
             sendDownUpKeyEvents(KeyEvent.KEYCODE_TAB);
         }
@@ -797,7 +805,9 @@ public class InputService extends InputMethodService implements SharedPreference
      * @param keyCode KeyEvent で定義されているキーコード
      */
     void handleDpad(int keyCode) {
-        if (isInputDisabled()) return;
+        if (isInputDisabled()) {
+            return;
+        }
         if (!mEngine.handleDpad(keyCode)) {
             sendDownUpKeyEvents(keyCode);
         }
@@ -974,19 +984,6 @@ public class InputService extends InputMethodService implements SharedPreference
     private void showTooltipNow(String text) {
         mHideHandler.removeCallbacks(mHideRunnable);
 
-        // スクリーン座標を IME ウィンドウ内の相対座標に変換するための基準取得
-        int[] locScreen = new int[2];
-        int[] locWindow = new int[2];
-        View anchor = (mInputView != null) ? mInputView.getRootView() : null;
-        if (anchor != null) {
-            anchor.getLocationOnScreen(locScreen);
-            anchor.getLocationInWindow(locWindow);
-        }
-
-        // ウィンドウ自体のスクリーン上での開始位置を正確に算出
-        int winX = locScreen[0] - locWindow[0];
-        int winY = locScreen[1] - locWindow[1];
-
         if (mTooltipPopup != null && mTooltipPopup.isShowing()) {
             // 既存のポップアップがあれば内容と位置だけ更新（ちらつき防止）
             TextView tv = (TextView) mTooltipPopup.getContentView();
@@ -1003,28 +1000,16 @@ public class InputService extends InputMethodService implements SharedPreference
             mTooltipPopup.setAnimationStyle(0); // アニメーションを無効化
             mTooltipPopup.setWindowLayoutType(WindowManager.LayoutParams.TYPE_APPLICATION_ATTACHED_DIALOG);
 
-            tv.measure(View.MeasureSpec.UNSPECIFIED, View.MeasureSpec.UNSPECIFIED);
-            int popupHeight = tv.getMeasuredHeight();
-            float density = getResources().getDisplayMetrics().density;
+            int[] coords = calculateTooltipCoordinates(tv);
+            int finalX = coords[0];
+            int finalY = coords[1];
 
-            int x = (mComposingHorizontal != -1) ? (int) mComposingHorizontal : (int) mCursorHorizontal + (int) (4 * density);
-            int y = (int) mCursorTop - popupHeight - (int) (30 * density);
-
-            // オフセット補正
-            int finalX = x - winX;
-            int finalY = y - winY;
-
-            // 補正結果が異常な場合（Titan 等の特定デバイス）は補正を無効化
-            if (finalY < -100) {
-                finalX = x;
-                finalY = y;
-            }
-
-            logI(String.format("showTooltip: SCR(%.1f, %.1f), WIN(%d, %d), DST(%d, %d)",
-                    mCursorHorizontal, mCursorTop, winX, winY, finalX, finalY));
+            logI(String.format("showTooltip: SCR(%.1f, %.1f), DST(%d, %d)",
+                    mCursorHorizontal, mCursorTop, finalX, finalY));
 
             try {
                 // anchor をアンカーにして算出した相対座標で表示
+                View anchor = (mInputView != null) ? mInputView.getRootView() : null;
                 mTooltipPopup.showAtLocation(anchor, Gravity.NO_GRAVITY, finalX, finalY);
             } catch (Exception e) {
                 logI("Failed to show tooltip: " + e.getMessage());

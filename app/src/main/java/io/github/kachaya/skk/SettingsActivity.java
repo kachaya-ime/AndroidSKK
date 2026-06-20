@@ -21,6 +21,7 @@ import java.io.BufferedReader;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.Map;
 import java.util.TreeMap;
 
@@ -115,6 +116,8 @@ public class SettingsActivity extends AppCompatActivity {
                             .setPositiveButton("初期化", (dialog, which) -> {
                                 SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(requireContext());
                                 prefs.edit().clear().apply();
+                                // レイアウトファイルも削除
+                                LayoutManager.clearLayouts(requireContext());
                                 // デフォルト値を再適用
                                 InputService.setupDefaultPreferences(requireContext());
                                 Toast.makeText(requireContext(), "設定を初期化しました", Toast.LENGTH_SHORT).show();
@@ -130,24 +133,32 @@ public class SettingsActivity extends AppCompatActivity {
         }
 
         private void backupSettings(Uri uri) {
-            if (uri == null) return;
-            try (OutputStream os = getContext().getContentResolver().openOutputStream(uri)) {
+            if (uri == null) {
+                return;
+            }
+            try (OutputStream os = getContext().getContentResolver().openOutputStream(uri, "wt")) {
                 SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(getContext());
                 Map<String, ?> allEntries = prefs.getAll();
                 TreeMap<String, Object> sortedMap = new TreeMap<>();
 
+                // まずは通常の SharedPreferences を入れる
                 for (Map.Entry<String, ?> entry : allEntries.entrySet()) {
                     String key = entry.getKey();
                     Object value = entry.getValue();
 
-                    // モダンな独立レイアウトキーは構造化して保存
+                    // レイアウト関連のキーは後で個別に処理するためここでは除外
                     if (key.endsWith("_normal") || key.endsWith("_shift") || key.endsWith("_symbol") ||
                             key.endsWith("_primary") || key.endsWith("_secondary")) {
-                        if (value instanceof String) {
-                            sortedMap.put(key, KeyConfig.layoutToJson((String) value));
-                        }
-                    } else {
-                        sortedMap.put(key, value);
+                        continue;
+                    }
+                    sortedMap.put(key, value);
+                }
+
+                // LayoutManager から独立したレイアウトを取得
+                for (String key : LayoutManager.getManagedKeys()) {
+                    String layoutStr = LayoutManager.loadLayout(getContext(), key, null);
+                    if (layoutStr != null) {
+                        sortedMap.put(key, KeyConfig.layoutFromAnyString(layoutStr));
                     }
                 }
 
@@ -158,9 +169,9 @@ public class SettingsActivity extends AppCompatActivity {
                 for (Map.Entry<String, Object> entry : sortedMap.entrySet()) {
                     sb.append("  \"").append(entry.getKey()).append("\": ");
                     Object val = entry.getValue();
-                    if (val instanceof JSONArray) {
-                        // 配列（レイアウト）は全体のインデントに合わせて整形
-                        sb.append(((JSONArray) val).toString(2).replace("\n", "\n  "));
+                    if (val instanceof KeyConfig[][]) {
+                        // 配列（レイアウト）は特定の整形を行う
+                        sb.append(KeyConfig.layoutToJsonString((KeyConfig[][]) val));
                     } else if (val instanceof String) {
                         sb.append(JSONObject.quote((String) val));
                     } else {
@@ -171,7 +182,7 @@ public class SettingsActivity extends AppCompatActivity {
                 }
                 sb.append("}");
 
-                os.write(sb.toString().getBytes());
+                os.write(sb.toString().getBytes(StandardCharsets.UTF_8));
                 Toast.makeText(getContext(), "バックアップを保存しました", Toast.LENGTH_SHORT).show();
             } catch (Exception e) {
                 Toast.makeText(getContext(), "バックアップの保存に失敗しました: " + e.getMessage(), Toast.LENGTH_LONG).show();
@@ -179,9 +190,11 @@ public class SettingsActivity extends AppCompatActivity {
         }
 
         private void restoreSettings(Uri uri) {
-            if (uri == null) return;
+            if (uri == null) {
+                return;
+            }
             try (InputStream is = getContext().getContentResolver().openInputStream(uri);
-                 BufferedReader reader = new BufferedReader(new InputStreamReader(is))) {
+                 BufferedReader reader = new BufferedReader(new InputStreamReader(is, StandardCharsets.UTF_8))) {
 
                 StringBuilder sb = new StringBuilder();
                 String line;
@@ -198,8 +211,9 @@ public class SettingsActivity extends AppCompatActivity {
                     Object value = json.get(key);
 
                     if (value instanceof JSONArray) {
-                        // 構造化されたレイアウトを内部形式に戻す
-                        editor.putString(key, KeyConfig.jsonToLayout((JSONArray) value));
+                        // 構造化されたレイアウトをファイルに保存
+                        String jsonStr = value.toString();
+                        LayoutManager.saveLayout(getContext(), key, jsonStr);
                     } else if (value instanceof Boolean) {
                         editor.putBoolean(key, (Boolean) value);
                     } else if (value instanceof Integer) {
@@ -212,6 +226,8 @@ public class SettingsActivity extends AppCompatActivity {
                         editor.putString(key, (String) value);
                     }
                 }
+                // レイアウト更新を通知
+                editor.putLong(LayoutManager.PREF_LAYOUT_UPDATED, System.currentTimeMillis());
                 editor.apply();
                 Toast.makeText(getContext(), "設定を復元しました", Toast.LENGTH_SHORT).show();
                 getActivity().recreate();

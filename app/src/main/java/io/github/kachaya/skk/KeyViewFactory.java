@@ -23,7 +23,7 @@ public class KeyViewFactory {
      */
     public static Button createKeyButton(Context context, KeyConfig config) {
         // 機能キー（コードあり）か文字キーかでスタイルと背景を切り替える
-        boolean isFunctional = (config.code != null);
+        boolean isFunctional = (config.code != KeyConfig.CODE_NONE);
         int style = isFunctional ? R.style.FunctionalKeyButton : R.style.CharacterButton;
         int bgRes = isFunctional ? R.drawable.bg_function_button_selector : R.drawable.bg_character_button_selector;
 

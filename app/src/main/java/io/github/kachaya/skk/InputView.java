@@ -24,6 +24,7 @@ import androidx.core.view.WindowInsetsCompat;
 import androidx.preference.PreferenceManager;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 /**
@@ -67,10 +68,14 @@ public class InputView extends LinearLayout {
     private String mKeyboardType;
     /** QWERTY キーボードでの Shift 状態。 */
     private boolean mIsShifted = false;
+    /** QWERTY キーボードでの Shift ロック状態。 */
+    private boolean mIsShiftLocked = false;
     /** QWERTY キーボードでの Control 状態。 */
     private boolean mIsControl = false;
     /** QWERTY キーボードでの 記号 状態。 */
     private boolean mIsSymbol = false;
+    /** QWERTY キーボードでの 記号 ロック状態。 */
+    private boolean mIsSymbolLocked = false;
 
     /** 現在のレイアウト定義（表示中のもの）。 */
     private KeyConfig[][] mCurrentLayout;
@@ -86,6 +91,9 @@ public class InputView extends LinearLayout {
 
     /** 最後に受け取った EditorInfo。設定変更時の UI 再構築に使用します。 */
     private EditorInfo mLastEditorInfo;
+
+    /** レイアウトの最終更新日時。キャッシュの無効化判定に使用します。 */
+    private long mLayoutUpdatedAt = 0;
 
     /** キーリピート用のハンドラ。 */
     private final Handler mRepeatHandler = new Handler(Looper.getMainLooper());
@@ -156,21 +164,31 @@ public class InputView extends LinearLayout {
         String defaultType = hasHardwareKeyboard ? "symbols" : "qwerty";
 
         String type = prefs.getString("keyboard_type", defaultType);
+        long updatedAt = prefs.getLong(LayoutManager.PREF_LAYOUT_UPDATED, 0);
 
-        boolean changed = (mKeyboardType != null && (!type.equals(mKeyboardType) || singleLine != mInputSingleLine));
+        boolean changed = (mKeyboardType != null);
 
         mHapticEnabled = haptic;
         mKeyboardType = type;
         mInputSingleLine = singleLine;
+        mLayoutUpdatedAt = updatedAt;
 
-        mNormalLayout = loadIndependentLayout(prefs, "custom_qwerty_layout", "_normal", KeyConfig.DEFAULT_QWERTY_NORMAL);
-        mShiftLayout = loadIndependentLayout(prefs, "custom_qwerty_layout", "_shift", KeyConfig.DEFAULT_QWERTY_SHIFT);
-        mSymbolLayout = loadIndependentLayout(prefs, "custom_qwerty_layout", "_symbol", KeyConfig.DEFAULT_QWERTY_SYMBOL);
+        mNormalLayout = loadIndependentLayout("custom_qwerty_layout", "_normal", KeyConfig.DEFAULT_QWERTY_NORMAL);
+        mShiftLayout = loadIndependentLayout("custom_qwerty_layout", "_shift", KeyConfig.DEFAULT_QWERTY_SHIFT);
+        mSymbolLayout = loadIndependentLayout("custom_qwerty_layout", "_symbol", KeyConfig.DEFAULT_QWERTY_SYMBOL);
 
-        mCurrentLayout = mNormalLayout;
+        // 現在のモードに応じたレイアウトを再設定
+        if (mIsSymbol) {
+            mCurrentLayout = mSymbolLayout;
+        } else if (mIsShifted) {
+            mCurrentLayout = mShiftLayout;
+        } else {
+            mCurrentLayout = mNormalLayout;
+        }
 
-        mSymbolsPrimary = KeyConfig.listFromString(prefs.getString("custom_symbols_primary", KeyConfig.DEFAULT_SYMBOLS_PRIMARY));
-        mSymbolsSecondary = KeyConfig.listFromString(prefs.getString("custom_symbols_secondary", KeyConfig.DEFAULT_SYMBOLS_SECONDARY));
+        KeyConfig[][] symLayout = KeyConfig.layoutFromAnyString(LayoutManager.loadLayout(getContext(), "custom_symbols_layout", KeyConfig.DEFAULT_SYMBOLS_LAYOUT));
+        mSymbolsPrimary = symLayout.length > 0 ? Arrays.asList(symLayout[0]) : new ArrayList<>();
+        mSymbolsSecondary = symLayout.length > 1 ? Arrays.asList(symLayout[1]) : new ArrayList<>();
         mMaxButtonCount = Math.max(mSymbolsPrimary.size(), mSymbolsSecondary.size());
 
         if (changed && mLastEditorInfo != null) {
@@ -178,20 +196,10 @@ public class InputView extends LinearLayout {
         }
     }
 
-    private KeyConfig[][] loadIndependentLayout(SharedPreferences prefs, String baseKey, String suffix, String defaultLayout) {
+    private KeyConfig[][] loadIndependentLayout(String baseKey, String suffix, String defaultLayout) {
         String key = baseKey + suffix;
-        String layoutStr = prefs.getString(key, defaultLayout);
-
-        String[] rows = layoutStr.split("\n");
-        KeyConfig[][] layout = new KeyConfig[rows.length][];
-        for (int i = 0; i < rows.length; i++) {
-            List<KeyConfig> configs = KeyConfig.listFromString(rows[i]);
-            layout[i] = new KeyConfig[configs.size()];
-            for (int j = 0; j < configs.size(); j++) {
-                layout[i][j] = configs.get(j);
-            }
-        }
-        return layout;
+        String layoutStr = LayoutManager.loadLayout(getContext(), key, defaultLayout);
+        return KeyConfig.layoutFromAnyString(layoutStr);
     }
 
     /**
@@ -208,10 +216,13 @@ public class InputView extends LinearLayout {
         mKeyboardLayout.removeAllViews();
         mSymbolButtons.clear();
 
-        if ("qwerty".equals(mKeyboardType)) {
-            buildKeyboard();
-        } else {
-            buildSymbolBar();
+        switch (mKeyboardType) {
+            case "qwerty":
+                buildKeyboard();
+                break;
+            default:
+                buildSymbolBar();
+                break;
         }
     }
 
@@ -293,7 +304,7 @@ public class InputView extends LinearLayout {
             for (int j = 0; j < mCurrentLayout[i].length; j++) {
                 KeyConfig config = mCurrentLayout[i][j];
 
-                if (KeyConfig.CODE_GAP.equals(config.code) || "GAP".equals(config.label)) {
+                if (config.code == KeyConfig.CODE_GAP || "GAP".equals(config.label)) {
                     View gapView = new View(getContext());
                     gapView.setTag(config);
                     row.addView(gapView, new LayoutParams(0, LayoutParams.MATCH_PARENT, config.weight));
@@ -332,7 +343,9 @@ public class InputView extends LinearLayout {
      * @param config キー設定
      */
     private void setupRepeatKey(Button b, KeyConfig config) {
-        if (!config.isRepeatable()) return;
+        if (!config.isRepeatable()) {
+            return;
+        }
 
         b.setOnTouchListener((v, event) -> {
             switch (event.getAction()) {
@@ -379,11 +392,18 @@ public class InputView extends LinearLayout {
      * 各モードが独立したレイアウトを持つようになったため、レイアウトを切り替えて再構築します。
      */
     private void updateKeys() {
-        if (!"qwerty".equals(mKeyboardType)) return;
+        if (!"qwerty".equals(mKeyboardType)) {
+            return;
+        }
 
-        KeyConfig[][] nextLayout = mNormalLayout;
-        if (mIsSymbol) nextLayout = mSymbolLayout;
-        else if (mIsShifted) nextLayout = mShiftLayout;
+        KeyConfig[][] nextLayout;
+        if (mIsSymbol) {
+            nextLayout = mSymbolLayout;
+        } else if (mIsShifted) {
+            nextLayout = mShiftLayout;
+        } else {
+            nextLayout = mNormalLayout;
+        }
 
         if (mCurrentLayout != nextLayout) {
             mCurrentLayout = nextLayout;
@@ -400,12 +420,16 @@ public class InputView extends LinearLayout {
                         if (bv instanceof Button) {
                             Button b = (Button) bv;
                             KeyConfig config = (KeyConfig) b.getTag();
-                            if (KeyConfig.CODE_SHIFT.equals(config.code)) {
-                                b.setSelected(mIsShifted);
-                            } else if (KeyConfig.CODE_CTRL.equals(config.code)) {
-                                b.setSelected(mIsControl);
-                            } else if (KeyConfig.CODE_SYM.equals(config.code)) {
-                                b.setSelected(mIsSymbol);
+                            switch (config.code) {
+                                case KeyConfig.CODE_SHIFT:
+                                    b.setSelected(mIsShifted);
+                                    break;
+                                case KeyConfig.CODE_CTRL:
+                                    b.setSelected(mIsControl);
+                                    break;
+                                case KeyConfig.CODE_SYM:
+                                    b.setSelected(mIsSymbol);
+                                    break;
                             }
                         }
                     }
@@ -418,9 +442,16 @@ public class InputView extends LinearLayout {
      * 一時的な状態（Shift/Sym）を解除し、通常レイアウトに戻します。
      */
     private void resetModifiers() {
-        if (mIsShifted || mIsSymbol) {
+        boolean changed = false;
+        if (!mIsShiftLocked && mIsShifted) {
             mIsShifted = false;
+            changed = true;
+        }
+        if (!mIsSymbolLocked && mIsSymbol) {
             mIsSymbol = false;
+            changed = true;
+        }
+        if (changed) {
             updateKeys();
         }
     }
@@ -429,23 +460,39 @@ public class InputView extends LinearLayout {
      * キーのクリック処理。
      */
     private void onClickKey(KeyConfig config) {
-        if (config.code != null) {
+        if (config.code != KeyConfig.CODE_NONE) {
             switch (config.code) {
                 case KeyConfig.CODE_SHIFT:
-                    mIsShifted = !mIsShifted;
+                    if (mIsShiftLocked) {
+                        mIsShiftLocked = false;
+                        mIsShifted = false;
+                    } else if (mIsShifted) {
+                        mIsShiftLocked = true;
+                    } else {
+                        mIsShifted = true;
+                    }
                     mIsControl = false;
                     mIsSymbol = false;
+                    mIsSymbolLocked = false;
                     updateKeys();
                     break;
                 case KeyConfig.CODE_CTRL:
                     mIsControl = !mIsControl;
-                    mIsShifted = false;
+                    mIsShifted = mIsShiftLocked && !mIsControl;
                     mIsSymbol = false;
+                    mIsSymbolLocked = false;
                     updateKeys();
                     break;
                 case KeyConfig.CODE_SYM:
-                    mIsSymbol = !mIsSymbol;
-                    mIsShifted = false;
+                    if (mIsSymbolLocked) {
+                        mIsSymbolLocked = false;
+                        mIsSymbol = false;
+                    } else if (mIsSymbol) {
+                        mIsSymbolLocked = true;
+                    } else {
+                        mIsSymbol = true;
+                    }
+                    mIsShifted = mIsShiftLocked && !mIsSymbol;
                     mIsControl = false;
                     updateKeys();
                     break;
@@ -491,6 +538,7 @@ public class InputView extends LinearLayout {
                         mInputService.handleCtrlKey(keyCode);
                     }
                     mIsControl = false;
+                    mIsShifted = mIsShiftLocked;
                     updateKeys();
                 } else {
                     mInputService.processKey(key.charAt(0));
@@ -659,10 +707,17 @@ public class InputView extends LinearLayout {
      */
     public void showCandidatesView() {
         mCandidatesView.setVisibility(VISIBLE);
-        if (mInputSingleLine && !"qwerty".equals(mKeyboardType)) {
-            mKeyboardLayout.setVisibility(GONE);
-        } else {
-            mKeyboardLayout.setVisibility(VISIBLE);
+        switch (mKeyboardType) {
+            case "qwerty":
+                mKeyboardLayout.setVisibility(VISIBLE);
+                break;
+            default:
+                if (mInputSingleLine) {
+                    mKeyboardLayout.setVisibility(GONE);
+                } else {
+                    mKeyboardLayout.setVisibility(VISIBLE);
+                }
+                break;
         }
     }
 
@@ -672,12 +727,17 @@ public class InputView extends LinearLayout {
      * QWERTY キーボードの場合は常に領域を確保（INVISIBLE）します。
      */
     public void hideCandidatesView() {
-        if ("qwerty".equals(mKeyboardType)) {
-            mCandidatesView.setVisibility(INVISIBLE);
-        } else if (mInputSingleLine) {
-            mCandidatesView.setVisibility(GONE);
-        } else {
-            mCandidatesView.setVisibility(INVISIBLE);
+        switch (mKeyboardType) {
+            case "qwerty":
+                mCandidatesView.setVisibility(INVISIBLE);
+                break;
+            default:
+                if (mInputSingleLine) {
+                    mCandidatesView.setVisibility(GONE);
+                } else {
+                    mCandidatesView.setVisibility(INVISIBLE);
+                }
+                break;
         }
         mKeyboardLayout.setVisibility(VISIBLE);
     }

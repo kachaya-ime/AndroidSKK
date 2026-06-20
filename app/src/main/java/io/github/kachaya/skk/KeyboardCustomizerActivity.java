@@ -3,7 +3,6 @@ package io.github.kachaya.skk;
 import android.content.ClipData;
 import android.content.ClipDescription;
 import android.content.Intent;
-import android.content.SharedPreferences;
 import android.net.Uri;
 import android.os.Bundle;
 import android.view.DragEvent;
@@ -26,16 +25,17 @@ import androidx.preference.PreferenceManager;
 import com.google.android.flexbox.FlexboxLayout;
 import com.google.android.material.tabs.TabLayout;
 
-import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.io.BufferedReader;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -60,6 +60,7 @@ public class KeyboardCustomizerActivity extends AppCompatActivity {
         DEFAULT_LAYOUTS.put("custom_qwerty_layout_normal", KeyConfig.DEFAULT_QWERTY_NORMAL);
         DEFAULT_LAYOUTS.put("custom_qwerty_layout_shift", KeyConfig.DEFAULT_QWERTY_SHIFT);
         DEFAULT_LAYOUTS.put("custom_qwerty_layout_symbol", KeyConfig.DEFAULT_QWERTY_SYMBOL);
+        DEFAULT_LAYOUTS.put("combined_symbols", KeyConfig.DEFAULT_SYMBOLS_LAYOUT);
     }
 
     private LinearLayout mPreviewContainer;
@@ -96,10 +97,14 @@ public class KeyboardCustomizerActivity extends AppCompatActivity {
 
         Intent intent = getIntent();
         mTargetPrefKey = intent.getStringExtra(EXTRA_PREF_KEY);
-        if (mTargetPrefKey == null) mTargetPrefKey = "custom_qwerty_layout";
+        if (mTargetPrefKey == null) {
+            mTargetPrefKey = "custom_qwerty_layout";
+        }
 
         String title = intent.getStringExtra(EXTRA_TITLE);
-        if (title != null) setTitle(title);
+        if (title != null) {
+            setTitle(title);
+        }
 
         mPreviewContainer = findViewById(R.id.keyboard_preview_container);
         mDeleteZone = findViewById(R.id.delete_zone);
@@ -138,9 +143,13 @@ public class KeyboardCustomizerActivity extends AppCompatActivity {
             // 現在のモードのレイアウトをバッファに保存
             mLayoutBuffers.put(mEditMode, serializeLayout());
 
-            if (checkedId == R.id.radio_normal) mEditMode = EditMode.NORMAL;
-            else if (checkedId == R.id.radio_shift) mEditMode = EditMode.SHIFT;
-            else if (checkedId == R.id.radio_symbol) mEditMode = EditMode.SYMBOL;
+            if (checkedId == R.id.radio_normal) {
+                mEditMode = EditMode.NORMAL;
+            } else if (checkedId == R.id.radio_shift) {
+                mEditMode = EditMode.SHIFT;
+            } else if (checkedId == R.id.radio_symbol) {
+                mEditMode = EditMode.SYMBOL;
+            }
 
             // 新しいモードのレイアウトを表示
             renderKeyboard(mLayoutBuffers.get(mEditMode));
@@ -215,10 +224,9 @@ public class KeyboardCustomizerActivity extends AppCompatActivity {
         // mLayoutBuffers に保持されている全モードのレイアウトを走査して使用中の文字を特定する
         for (String layoutStr : mLayoutBuffers.values()) {
             if (layoutStr == null) continue;
-            String[] rows = layoutStr.split("\n");
-            for (String row : rows) {
-                List<KeyConfig> configs = KeyConfig.listFromString(row);
-                for (KeyConfig cfg : configs) {
+            KeyConfig[][] layout = KeyConfig.layoutFromAnyString(layoutStr);
+            for (KeyConfig[] row : layout) {
+                for (KeyConfig cfg : row) {
                     if (cfg.label != null) {
                         mUsedChars.add(cfg.label);
                     }
@@ -228,15 +236,12 @@ public class KeyboardCustomizerActivity extends AppCompatActivity {
     }
 
     private void loadLayout() {
-        SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(this);
         mPreviewContainer.removeAllViews();
 
         if ("combined_symbols".equals(mTargetPrefKey)) {
-            String primary = prefs.getString("custom_symbols_primary", KeyConfig.DEFAULT_SYMBOLS_PRIMARY);
-            String secondary = prefs.getString("custom_symbols_secondary", KeyConfig.DEFAULT_SYMBOLS_SECONDARY);
-            String combined = primary + "\n" + secondary;
-            mLayoutBuffers.put(EditMode.NORMAL, combined);
-            renderKeyboard(combined);
+            String layoutStr = LayoutManager.loadLayout(this, "custom_symbols_layout", KeyConfig.DEFAULT_SYMBOLS_LAYOUT);
+            mLayoutBuffers.put(EditMode.NORMAL, layoutStr);
+            renderKeyboard(layoutStr);
         } else {
             // 各モードのレイアウトを読み込む
             loadIndependentLayout(EditMode.NORMAL, "_normal");
@@ -250,27 +255,32 @@ public class KeyboardCustomizerActivity extends AppCompatActivity {
     }
 
     private void loadIndependentLayout(EditMode mode, String suffix) {
-        SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(this);
         String key = mTargetPrefKey + suffix;
         String defaultVal = DEFAULT_LAYOUTS.get(key);
         if (defaultVal == null) defaultVal = "";
 
-        String saved = prefs.getString(key, defaultVal);
+        String saved = LayoutManager.loadLayout(this, key, defaultVal);
         mLayoutBuffers.put(mode, saved);
     }
 
 
     private void renderKeyboard(String layoutStr) {
+        if (layoutStr == null) {
+            return;
+        }
+        renderKeyboard(KeyConfig.layoutFromAnyString(layoutStr));
+    }
+
+    private void renderKeyboard(KeyConfig[][] layout) {
         mPreviewContainer.removeAllViews();
-        if (layoutStr == null) return;
+        // レイアウトが空の場合は、編集を可能にするため空の行を1つ作成する
+        if (layout == null || layout.length == 0) {
+            layout = new KeyConfig[][]{{}};
+        }
 
-        // -1 を指定することで、末尾の改行による空行も保持して分割する
-        String[] rows = layoutStr.split("\n", -1);
-
-        for (String row : rows) {
+        for (KeyConfig[] rowConfigs : layout) {
             LinearLayout rowLayout = createRowLayout();
-            List<KeyConfig> configs = KeyConfig.listFromString(row);
-            if (configs.isEmpty()) {
+            if (rowConfigs.length == 0) {
                 TextView tv = new TextView(this);
                 tv.setText("ここへキーをドラッグして追加");
                 tv.setTextColor(android.graphics.Color.LTGRAY);
@@ -280,7 +290,7 @@ public class KeyboardCustomizerActivity extends AppCompatActivity {
                 tv.setTag("placeholder");
                 rowLayout.addView(tv);
             } else {
-                for (KeyConfig config : configs) {
+                for (KeyConfig config : rowConfigs) {
                     rowLayout.addView(createKeyView(config, true));
                 }
             }
@@ -314,7 +324,7 @@ public class KeyboardCustomizerActivity extends AppCompatActivity {
             paletteItemWidth = availableWidth / 10;
         }
 
-        if (KeyConfig.CODE_GAP.equals(config.code) || "GAP".equals(config.label)) {
+        if (config.code == KeyConfig.CODE_GAP || "GAP".equals(config.label)) {
             // GAPキーの表示（編集画面用）
             TextView tv = new TextView(this);
             tv.setText("Gap");
@@ -369,7 +379,7 @@ public class KeyboardCustomizerActivity extends AppCompatActivity {
                 v.setHapticFeedbackEnabled(true);
                 v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP, HapticFeedbackConstants.FLAG_IGNORE_GLOBAL_SETTING);
             }
-            if (isInKeyboard || KeyConfig.CODE_GAP.equals(config.code) || "GAP".equals(config.label)) {
+            if (isInKeyboard || config.code == KeyConfig.CODE_GAP || "GAP".equals(config.label)) {
                 showKeyEditDialog(config);
             }
         });
@@ -401,7 +411,7 @@ public class KeyboardCustomizerActivity extends AppCompatActivity {
         layout.setOrientation(LinearLayout.VERTICAL);
         layout.setPadding(40, 20, 40, 20);
 
-        boolean isGap = KeyConfig.CODE_GAP.equals(config.code) || "GAP".equals(config.label);
+        boolean isGap = config.code == KeyConfig.CODE_GAP || "GAP".equals(config.label);
         boolean isSymbolBar = "combined_symbols".equals(mTargetPrefKey);
 
         KeyConfigProvider configProvider = null;
@@ -454,7 +464,7 @@ public class KeyboardCustomizerActivity extends AppCompatActivity {
 
         android.widget.Spinner spinner = new android.widget.Spinner(this);
         String[] funcLabels = {"(文字入力)", "Shift", "Enter", "Backspace", "Space", "Sym", "Ctrl", "Tab", "左移動", "右移動", "上移動", "下移動"};
-        String[] funcCodes = {null, KeyConfig.CODE_SHIFT, KeyConfig.CODE_ENTER, KeyConfig.CODE_BACKSPACE, KeyConfig.CODE_SPACE, KeyConfig.CODE_SYM, KeyConfig.CODE_CTRL, KeyConfig.CODE_TAB, KeyConfig.CODE_LEFT, KeyConfig.CODE_RIGHT, KeyConfig.CODE_UP, KeyConfig.CODE_DOWN};
+        int[] funcCodes = {KeyConfig.CODE_NONE, KeyConfig.CODE_SHIFT, KeyConfig.CODE_ENTER, KeyConfig.CODE_BACKSPACE, KeyConfig.CODE_SPACE, KeyConfig.CODE_SYM, KeyConfig.CODE_CTRL, KeyConfig.CODE_TAB, KeyConfig.CODE_LEFT, KeyConfig.CODE_RIGHT, KeyConfig.CODE_UP, KeyConfig.CODE_DOWN};
 
         android.widget.ArrayAdapter<String> adapter = new android.widget.ArrayAdapter<>(this, android.R.layout.simple_spinner_item, funcLabels);
         adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
@@ -466,9 +476,9 @@ public class KeyboardCustomizerActivity extends AppCompatActivity {
         etLabel.setText(config.label);
 
         int selected = 0;
-        if (config.code != null) {
+        if (config.code != KeyConfig.CODE_NONE) {
             for (int i = 1; i < funcCodes.length; i++) {
-                if (funcCodes[i].equals(config.code)) {
+                if (funcCodes[i] == config.code) {
                     selected = i;
                     break;
                 }
@@ -476,11 +486,35 @@ public class KeyboardCustomizerActivity extends AppCompatActivity {
         }
         spinner.setSelection(selected);
 
+        // 機能が選択された時に、デフォルトのラベルをセットする
+        final int[] finalCodes = funcCodes;
+        spinner.setOnItemSelectedListener(new android.widget.AdapterView.OnItemSelectedListener() {
+            private boolean isInitial = true;
+
+            @Override
+            public void onItemSelected(android.widget.AdapterView<?> parent, android.view.View view, int position, long id) {
+                if (isInitial) {
+                    isInitial = false;
+                    return;
+                }
+                int code = finalCodes[position];
+                if (code != KeyConfig.CODE_NONE) {
+                    String defaultLabel = KeyConfig.getDefaultLabel(code);
+                    if (!defaultLabel.isEmpty()) {
+                        etLabel.setText(defaultLabel);
+                    }
+                }
+            }
+
+            @Override
+            public void onNothingSelected(android.widget.AdapterView<?> parent) {
+            }
+        });
+
         row.addView(spinner);
         row.addView(etLabel);
         container.addView(row);
 
-        final String[] finalCodes = funcCodes;
         return (cfg) -> {
             int pos = spinner.getSelectedItemPosition();
             cfg.code = finalCodes[pos];
@@ -500,9 +534,23 @@ public class KeyboardCustomizerActivity extends AppCompatActivity {
     }
 
     private void updatePaletteVisibility(int position) {
-        mPaletteSpecial.setVisibility(position == 0 ? View.VISIBLE : View.GONE);
-        mPaletteAlpha.setVisibility(position == 1 ? View.VISIBLE : View.GONE);
-        mPaletteOther.setVisibility(position == 2 ? View.VISIBLE : View.GONE);
+        switch (position) {
+            case 0:
+                mPaletteSpecial.setVisibility(View.VISIBLE);
+                mPaletteAlpha.setVisibility(View.GONE);
+                mPaletteOther.setVisibility(View.GONE);
+                break;
+            case 1:
+                mPaletteSpecial.setVisibility(View.GONE);
+                mPaletteAlpha.setVisibility(View.VISIBLE);
+                mPaletteOther.setVisibility(View.GONE);
+                break;
+            case 2:
+                mPaletteSpecial.setVisibility(View.GONE);
+                mPaletteAlpha.setVisibility(View.GONE);
+                mPaletteOther.setVisibility(View.VISIBLE);
+                break;
+        }
     }
 
     /**
@@ -555,7 +603,9 @@ public class KeyboardCustomizerActivity extends AppCompatActivity {
      */
     private void fillPaletteDummies(FlexboxLayout palette, int currentCount) {
         int remainder = currentCount % 10;
-        if (remainder == 0) return;
+        if (remainder == 0) {
+            return;
+        }
         int dummiesNeeded = 10 - remainder;
 
         float density = getResources().getDisplayMetrics().density;
@@ -576,66 +626,64 @@ public class KeyboardCustomizerActivity extends AppCompatActivity {
     }
 
     private List<String> serializeAllRows() {
-        List<String> rows = new ArrayList<>();
-        for (int idx = 0; idx < mPreviewContainer.getChildCount(); idx++) {
-            View child = mPreviewContainer.getChildAt(idx);
-            if (child instanceof LinearLayout) {
-                LinearLayout row = (LinearLayout) child;
-                StringBuilder sb = new StringBuilder();
-                for (int j = 0; j < row.getChildCount(); j++) {
-                    View v = row.getChildAt(j);
-                    if (v == mInsertionIndicator || "placeholder".equals(v.getTag())) continue;
-                    KeyConfig config = (KeyConfig) v.getTag();
-                    if (config != null) {
-                        sb.append(config.toString()).append(" ");
-                    }
-                }
-                rows.add(sb.toString().trim());
-            }
-        }
-        return rows;
+        return null; // 不使用
     }
 
     private String serializeLayout() {
-        List<String> rows = serializeAllRows();
-        StringBuilder sb = new StringBuilder();
-        for (int i = 0; i < rows.size(); i++) {
-            sb.append(rows.get(i));
-            if (i < rows.size() - 1) {
-                sb.append("\n");
-            }
+        List<List<KeyConfig>> layout = serializeLayoutToConfigs();
+        KeyConfig[][] arr = new KeyConfig[layout.size()][];
+        for (int i = 0; i < layout.size(); i++) {
+            arr[i] = layout.get(i).toArray(new KeyConfig[0]);
         }
-        return sb.toString();
+        return KeyConfig.layoutToJsonString(arr);
     }
 
     private void saveLayout() {
-        SharedPreferences.Editor editor = PreferenceManager.getDefaultSharedPreferences(this).edit();
-
         if ("combined_symbols".equals(mTargetPrefKey)) {
-            List<String> rows = serializeAllRows();
-            if (rows.size() >= 1) {
-                editor.putString("custom_symbols_primary", rows.get(0));
-            }
-            if (rows.size() >= 2) {
-                editor.putString("custom_symbols_secondary", rows.get(1));
-            }
+            LayoutManager.saveLayout(this, "custom_symbols_layout", serializeLayout());
         } else {
             // 現在の編集内容をバッファに反映
             mLayoutBuffers.put(mEditMode, serializeLayout());
 
             // 全モード（通常・シフト・記号）を一括で保存
-            editor.putString(mTargetPrefKey + "_normal", mLayoutBuffers.get(EditMode.NORMAL));
-            editor.putString(mTargetPrefKey + "_shift", mLayoutBuffers.get(EditMode.SHIFT));
-            editor.putString(mTargetPrefKey + "_symbol", mLayoutBuffers.get(EditMode.SYMBOL));
+            LayoutManager.saveLayout(this, mTargetPrefKey + "_normal", mLayoutBuffers.get(EditMode.NORMAL));
+            LayoutManager.saveLayout(this, mTargetPrefKey + "_shift", mLayoutBuffers.get(EditMode.SHIFT));
+            LayoutManager.saveLayout(this, mTargetPrefKey + "_symbol", mLayoutBuffers.get(EditMode.SYMBOL));
         }
 
-        editor.apply();
+        // 変更を通知するために SharedPreferences を更新
+        PreferenceManager.getDefaultSharedPreferences(this).edit()
+                .putLong(LayoutManager.PREF_LAYOUT_UPDATED, System.currentTimeMillis())
+                .commit();
+
         Toast.makeText(this, "配置を保存しました", Toast.LENGTH_SHORT).show();
+    }
+
+    private List<List<KeyConfig>> serializeLayoutToConfigs() {
+        List<List<KeyConfig>> layout = new ArrayList<>();
+        for (int idx = 0; idx < mPreviewContainer.getChildCount(); idx++) {
+            View child = mPreviewContainer.getChildAt(idx);
+            if (child instanceof LinearLayout) {
+                LinearLayout rowLayout = (LinearLayout) child;
+                List<KeyConfig> rowConfigs = new ArrayList<>();
+                for (int j = 0; j < rowLayout.getChildCount(); j++) {
+                    View v = rowLayout.getChildAt(j);
+                    if (v == mInsertionIndicator || "placeholder".equals(v.getTag())) continue;
+                    KeyConfig config = (KeyConfig) v.getTag();
+                    if (config != null) {
+                        rowConfigs.add(config);
+                    }
+                }
+                layout.add(rowConfigs);
+            }
+        }
+        return layout;
     }
 
     private void resetToDefault() {
         if ("combined_symbols".equals(mTargetPrefKey)) {
-            renderKeyboard(KeyConfig.DEFAULT_SYMBOLS_PRIMARY + "\n" + KeyConfig.DEFAULT_SYMBOLS_SECONDARY);
+            mLayoutBuffers.put(EditMode.NORMAL, KeyConfig.DEFAULT_SYMBOLS_LAYOUT);
+            renderKeyboard(KeyConfig.DEFAULT_SYMBOLS_LAYOUT);
         } else {
             // 全モードをデフォルト値にリセット
             mLayoutBuffers.put(EditMode.NORMAL, DEFAULT_LAYOUTS.get(mTargetPrefKey + "_normal"));
@@ -650,20 +698,19 @@ public class KeyboardCustomizerActivity extends AppCompatActivity {
 
     private void backupLayout(Uri uri) {
         if (uri == null) return;
-        try (OutputStream os = getContentResolver().openOutputStream(uri)) {
+        try (OutputStream os = getContentResolver().openOutputStream(uri, "wt")) {
             if (os == null) return;
-            JSONObject json = new JSONObject();
+            Map<String, KeyConfig[][]> layouts = new LinkedHashMap<>();
             if ("combined_symbols".equals(mTargetPrefKey)) {
-                List<String> rows = serializeAllRows();
-                if (rows.size() >= 1) json.put("custom_symbols_primary", KeyConfig.layoutToJson(rows.get(0)));
-                if (rows.size() >= 2) json.put("custom_symbols_secondary", KeyConfig.layoutToJson(rows.get(1)));
+                layouts.put("custom_symbols_layout", KeyConfig.layoutFromAnyString(serializeLayout()));
             } else {
                 mLayoutBuffers.put(mEditMode, serializeLayout());
-                json.put(mTargetPrefKey + "_normal", KeyConfig.layoutToJson(mLayoutBuffers.get(EditMode.NORMAL)));
-                json.put(mTargetPrefKey + "_shift", KeyConfig.layoutToJson(mLayoutBuffers.get(EditMode.SHIFT)));
-                json.put(mTargetPrefKey + "_symbol", KeyConfig.layoutToJson(mLayoutBuffers.get(EditMode.SYMBOL)));
+                layouts.put(mTargetPrefKey + "_normal", KeyConfig.layoutFromAnyString(mLayoutBuffers.get(EditMode.NORMAL)));
+                layouts.put(mTargetPrefKey + "_shift", KeyConfig.layoutFromAnyString(mLayoutBuffers.get(EditMode.SHIFT)));
+                layouts.put(mTargetPrefKey + "_symbol", KeyConfig.layoutFromAnyString(mLayoutBuffers.get(EditMode.SYMBOL)));
             }
-            os.write(json.toString(2).getBytes());
+            String jsonString = KeyConfig.backupToJsonString(layouts);
+            os.write(jsonString.getBytes(StandardCharsets.UTF_8));
             Toast.makeText(this, "配置をバックアップしました", Toast.LENGTH_SHORT).show();
         } catch (Exception e) {
             Toast.makeText(this, "バックアップに失敗しました: " + e.getMessage(), Toast.LENGTH_LONG).show();
@@ -673,18 +720,15 @@ public class KeyboardCustomizerActivity extends AppCompatActivity {
     private void restoreLayout(Uri uri) {
         if (uri == null) return;
         try (InputStream is = getContentResolver().openInputStream(uri);
-             BufferedReader reader = new BufferedReader(new InputStreamReader(is))) {
+             BufferedReader reader = new BufferedReader(new InputStreamReader(is, StandardCharsets.UTF_8))) {
             StringBuilder sb = new StringBuilder();
             String line;
             while ((line = reader.readLine()) != null) sb.append(line);
 
             JSONObject json = new JSONObject(sb.toString());
             if ("combined_symbols".equals(mTargetPrefKey)) {
-                if (json.has("custom_symbols_primary")) {
-                    String primary = KeyConfig.jsonToLayout(json.getJSONArray("custom_symbols_primary"));
-                    String secondary = json.has("custom_symbols_secondary") ?
-                            KeyConfig.jsonToLayout(json.getJSONArray("custom_symbols_secondary")) : "";
-                    mLayoutBuffers.put(EditMode.NORMAL, primary + "\n" + secondary);
+                if (json.has("custom_symbols_layout")) {
+                    mLayoutBuffers.put(EditMode.NORMAL, json.getJSONArray("custom_symbols_layout").toString());
                 }
             } else {
                 String[] suffixes = {"_normal", "_shift", "_symbol"};
@@ -692,7 +736,7 @@ public class KeyboardCustomizerActivity extends AppCompatActivity {
                 for (int i = 0; i < suffixes.length; i++) {
                     String key = mTargetPrefKey + suffixes[i];
                     if (json.has(key)) {
-                        mLayoutBuffers.put(modes[i], KeyConfig.jsonToLayout(json.getJSONArray(key)));
+                        mLayoutBuffers.put(modes[i], json.getJSONArray(key).toString());
                     }
                 }
             }
@@ -800,7 +844,9 @@ public class KeyboardCustomizerActivity extends AppCompatActivity {
             List<KeyConfig> configs = new ArrayList<>();
             for (int i = 0; i < childCount; i++) {
                 View child = container.getChildAt(i);
-                if (child == mInsertionIndicator || "placeholder".equals(child.getTag())) continue;
+                if (child == mInsertionIndicator || "placeholder".equals(child.getTag())) {
+                    continue;
+                }
                 KeyConfig cfg = (KeyConfig) child.getTag();
                 if (cfg != null) {
                     configs.add(cfg);
@@ -808,10 +854,14 @@ public class KeyboardCustomizerActivity extends AppCompatActivity {
                 }
             }
 
-            if (totalWeight <= 0) return 0;
+            if (totalWeight <= 0) {
+                return 0;
+            }
 
             float containerWidth = container.getWidth();
-            if (containerWidth <= 0) return 0;
+            if (containerWidth <= 0) {
+                return 0;
+            }
 
             int indicatorWidth = mInsertionIndicator.getLayoutParams().width;
             // インジケーターが表示されている場合、キーが占有できる幅はその分減少している

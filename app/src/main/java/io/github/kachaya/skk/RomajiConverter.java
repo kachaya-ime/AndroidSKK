@@ -402,8 +402,9 @@ public class RomajiConverter {
      * @param code 入力されたキーの Unicode コードポイント
      */
     void processKey(int code) {
-        // シフトキーの状態をチェック
-        boolean isUpper = Character.isUpperCase(code);
+        // シフトキーの状態をチェック。SKKでは ASCII 大文字のみを状態遷移のトリガーとする。
+        // ギリシャ文字等の大文字が誤反応するのを防ぐため、明示的に A-Z の範囲に限定する。
+        boolean isUpper = (code >= 'A' && code <= 'Z');
         if (isUpper) { // ローマ字変換のために小文字として扱う
             code = Character.toLowerCase(code);
         }

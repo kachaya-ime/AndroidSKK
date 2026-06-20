@@ -6,12 +6,127 @@ import org.json.JSONObject;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 1つのキーの定義（ラベルとウェイト）を保持するクラスです。
  * 通常・シフト・記号などの各レイアウトは、このオブジェクトの独立したリストとして構成されます。
  */
 public class KeyConfig {
+
+    // --- Functional Codes ---
+    public static final int CODE_NONE = 0;
+    public static final int CODE_SHIFT = 1;
+    public static final int CODE_ENTER = 2;
+    public static final int CODE_BACKSPACE = 3;
+    public static final int CODE_SPACE = 4;
+    public static final int CODE_SYM = 5;
+    public static final int CODE_CTRL = 6;
+    public static final int CODE_TAB = 7;
+    public static final int CODE_LEFT = 8;
+    public static final int CODE_RIGHT = 9;
+    public static final int CODE_UP = 10;
+    public static final int CODE_DOWN = 11;
+    public static final int CODE_GAP = 12;
+
+    /** ファイル保存用の識別名に変換します */
+    public static String codeToString(int code) {
+        switch (code) {
+            case CODE_SHIFT:
+                return "SHIFT";
+            case CODE_ENTER:
+                return "ENTER";
+            case CODE_BACKSPACE:
+                return "BACKSPACE";
+            case CODE_SPACE:
+                return "SPACE";
+            case CODE_SYM:
+                return "SYM";
+            case CODE_CTRL:
+                return "CTRL";
+            case CODE_TAB:
+                return "TAB";
+            case CODE_LEFT:
+                return "LEFT";
+            case CODE_RIGHT:
+                return "RIGHT";
+            case CODE_UP:
+                return "UP";
+            case CODE_DOWN:
+                return "DOWN";
+            case CODE_GAP:
+                return "GAP";
+            default:
+                return null;
+        }
+    }
+
+    /** 識別名からコードに変換します（大文字小文字を区別しません） */
+    public static int stringToCode(String s) {
+        if (s == null || s.isEmpty()) {
+            return CODE_NONE;
+        }
+        switch (s.toUpperCase()) {
+            case "SHIFT":
+                return CODE_SHIFT;
+            case "ENTER":
+                return CODE_ENTER;
+            case "BACKSPACE":
+                return CODE_BACKSPACE;
+            case "SPACE":
+                return CODE_SPACE;
+            case "SYM":
+                return CODE_SYM;
+            case "CTRL":
+                return CODE_CTRL;
+            case "TAB":
+                return CODE_TAB;
+            case "LEFT":
+                return CODE_LEFT;
+            case "RIGHT":
+                return CODE_RIGHT;
+            case "UP":
+                return CODE_UP;
+            case "DOWN":
+                return CODE_DOWN;
+            case "GAP":
+                return CODE_GAP;
+            default:
+                return CODE_NONE;
+        }
+    }
+
+    /** 各機能のデフォルトの表示ラベルを返します */
+    public static String getDefaultLabel(int code) {
+        switch (code) {
+            case CODE_SPACE:
+                return "⌴";
+            case CODE_ENTER:
+                return "⏎";
+            case CODE_BACKSPACE:
+                return "⌫";
+            case CODE_SHIFT:
+                return "⇧";
+            case CODE_CTRL:
+                return "Ctrl";
+            case CODE_TAB:
+                return "Tab";
+            case CODE_LEFT:
+                return "◂";
+            case CODE_UP:
+                return "▴";
+            case CODE_DOWN:
+                return "▾";
+            case CODE_RIGHT:
+                return "▸";
+            case CODE_SYM:
+                return "Sym";
+            case CODE_GAP:
+                return "Gap";
+            default:
+                return "";
+        }
+    }
 
     // --- QWERTY Layout Defaults ---
 
@@ -53,7 +168,7 @@ public class KeyConfig {
                     new KeyConfig("-"),
             },
             {
-                    new KeyConfig("⇧", 1.5f),
+                    new KeyConfig(CODE_SHIFT, 1.5f),
                     new KeyConfig("z"),
                     new KeyConfig("x"),
                     new KeyConfig("c"),
@@ -61,17 +176,17 @@ public class KeyConfig {
                     new KeyConfig("b"),
                     new KeyConfig("n"),
                     new KeyConfig("m"),
-                    new KeyConfig("⌫", 1.5f),
+                    new KeyConfig(CODE_BACKSPACE, 1.5f),
             },
             {
-                    new KeyConfig("Ctrl", 1.5f),
-                    new KeyConfig("Sym"),
+                    new KeyConfig(CODE_CTRL, 1.5f),
+                    new KeyConfig(CODE_SYM),
                     new KeyConfig(","),
-                    new KeyConfig("⌴", 2.0f),
+                    new KeyConfig(CODE_SPACE, 2.0f),
                     new KeyConfig("."),
-                    new KeyConfig("◂"),
-                    new KeyConfig("▸"),
-                    new KeyConfig("⏎", 1.5f),
+                    new KeyConfig(CODE_LEFT),
+                    new KeyConfig(CODE_RIGHT),
+                    new KeyConfig(CODE_ENTER, 1.5f),
             }
     });
 
@@ -113,7 +228,7 @@ public class KeyConfig {
                     new KeyConfig("/"),
             },
             {
-                    new KeyConfig("⇧", 1.5f),
+                    new KeyConfig(CODE_SHIFT, 1.5f),
                     new KeyConfig("Z"),
                     new KeyConfig("X"),
                     new KeyConfig("C"),
@@ -121,17 +236,17 @@ public class KeyConfig {
                     new KeyConfig("B"),
                     new KeyConfig("N"),
                     new KeyConfig("M"),
-                    new KeyConfig("⌫", 1.5f),
+                    new KeyConfig(CODE_BACKSPACE, 1.5f),
             },
             {
-                    new KeyConfig("Ctrl", 1.5f),
-                    new KeyConfig("Sym"),
+                    new KeyConfig(CODE_CTRL, 1.5f),
+                    new KeyConfig(CODE_SYM),
                     new KeyConfig("<"),
-                    new KeyConfig("⌴", 2.0f),
+                    new KeyConfig(CODE_SPACE, 2.0f),
                     new KeyConfig(">"),
-                    new KeyConfig("◂"),
-                    new KeyConfig("▸"),
-                    new KeyConfig("⏎", 1.5f),
+                    new KeyConfig(CODE_LEFT),
+                    new KeyConfig(CODE_RIGHT),
+                    new KeyConfig(CODE_ENTER, 1.5f),
             }
     });
 
@@ -173,7 +288,7 @@ public class KeyConfig {
                     new KeyConfig("]"),
             },
             {
-                    new KeyConfig("Tab", 1.5f),
+                    new KeyConfig(CODE_TAB, 1.5f),
                     new KeyConfig("`"),
                     new KeyConfig("\""),
                     new KeyConfig("'"),
@@ -181,23 +296,23 @@ public class KeyConfig {
                     new KeyConfig(":"),
                     new KeyConfig("<"),
                     new KeyConfig(">"),
-                    new KeyConfig("⌫", 1.5f),
+                    new KeyConfig(CODE_BACKSPACE, 1.5f),
             },
             {
-                    new KeyConfig("Ctrl", 1.5f),
-                    new KeyConfig("Sym"),
+                    new KeyConfig(CODE_CTRL, 1.5f),
+                    new KeyConfig(CODE_SYM),
                     new KeyConfig("!"),
-                    new KeyConfig("⌴", 2.0f),
+                    new KeyConfig(CODE_SPACE, 2.0f),
                     new KeyConfig("?"),
-                    new KeyConfig("◂"),
-                    new KeyConfig("▸"),
-                    new KeyConfig("⏎", 1.5f),
+                    new KeyConfig(CODE_LEFT),
+                    new KeyConfig(CODE_RIGHT),
+                    new KeyConfig(CODE_ENTER, 1.5f),
             }
     });
 
     // --- Symbols Bar Defaults ---
 
-    public static final String DEFAULT_SYMBOLS_PRIMARY = KeyConfig.layoutFromConfigArray(new KeyConfig[][]{
+    public static final String DEFAULT_SYMBOLS_LAYOUT = KeyConfig.layoutFromConfigArray(new KeyConfig[][]{
             {
                     new KeyConfig("~"),
                     new KeyConfig("{"),
@@ -209,10 +324,7 @@ public class KeyConfig {
                     new KeyConfig(","),
                     new KeyConfig("."),
                     new KeyConfig("-")
-            }
-    });
-
-    public static final String DEFAULT_SYMBOLS_SECONDARY = KeyConfig.layoutFromConfigArray(new KeyConfig[][]{
+            },
             {
                     new KeyConfig("`"),
                     new KeyConfig("^"),
@@ -227,34 +339,20 @@ public class KeyConfig {
             }
     });
 
-    // --- Functional Codes ---
-    public static final String CODE_SHIFT = "SHIFT";
-    public static final String CODE_ENTER = "ENTER";
-    public static final String CODE_BACKSPACE = "BACKSPACE";
-    public static final String CODE_SPACE = "SPACE";
-    public static final String CODE_SYM = "SYM";
-    public static final String CODE_CTRL = "CTRL";
-    public static final String CODE_TAB = "TAB";
-    public static final String CODE_LEFT = "LEFT";
-    public static final String CODE_RIGHT = "RIGHT";
-    public static final String CODE_UP = "UP";
-    public static final String CODE_DOWN = "DOWN";
-    public static final String CODE_GAP = "GAP";
-
     /** パレット用：特殊キー */
     public static final List<KeyConfig> PALETTE_SPECIAL_KEYS = new ArrayList<KeyConfig>() {{
-        add(new KeyConfig("⌴", CODE_SPACE));
-        add(new KeyConfig("⏎", CODE_ENTER));
-        add(new KeyConfig("⌫", CODE_BACKSPACE));
-        add(new KeyConfig("⇧", CODE_SHIFT));
-        add(new KeyConfig("Ctrl", CODE_CTRL));
-        add(new KeyConfig("Tab", CODE_TAB));
-        add(new KeyConfig("◂", CODE_LEFT));
-        add(new KeyConfig("▴", CODE_UP));
-        add(new KeyConfig("▾", CODE_DOWN));
-        add(new KeyConfig("▸", CODE_RIGHT));
-        add(new KeyConfig("Sym", CODE_SYM));
-        add(new KeyConfig("Gap", CODE_GAP));
+        add(new KeyConfig(CODE_SPACE));
+        add(new KeyConfig(CODE_ENTER));
+        add(new KeyConfig(CODE_BACKSPACE));
+        add(new KeyConfig(CODE_SHIFT));
+        add(new KeyConfig(CODE_CTRL));
+        add(new KeyConfig(CODE_TAB));
+        add(new KeyConfig(CODE_LEFT));
+        add(new KeyConfig(CODE_UP));
+        add(new KeyConfig(CODE_DOWN));
+        add(new KeyConfig(CODE_RIGHT));
+        add(new KeyConfig(CODE_SYM));
+        add(new KeyConfig(CODE_GAP));
     }};
 
     /** パレット用：英数字 */
@@ -277,198 +375,186 @@ public class KeyConfig {
     public static final List<KeyConfig> PALETTE_SYMBOL_BAR_KEYS = new ArrayList<KeyConfig>() {{
         // 基本的な記号 (ASCII文字)
         String basic = "!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~¥";
-        for (char c : basic.toCharArray()) add(new KeyConfig(String.valueOf(c)));
+        for (char c : basic.toCharArray()) {
+            add(new KeyConfig(String.valueOf(c)));
+        }
     }};
 
     public String label;
     public float weight;
-    public String code;
+    public int code;
 
+    /** 文字キーのコンストラクタ（ウェイト 1.0） */
     public KeyConfig(String label) {
-        this(label, 1.0f, null);
+        this(label, 1.0f, CODE_NONE);
     }
 
-    public KeyConfig(String label, String code) {
-        this(label, 1.0f, code);
-    }
-
+    /** 文字キーのコンストラクタ（ウェイト指定） */
     public KeyConfig(String label, float weight) {
-        this(label, weight, null);
+        this(label, weight, CODE_NONE);
     }
 
-    public KeyConfig(String label, float weight, String code) {
+    /** 機能キーのコンストラクタ（ウェイト 1.0） */
+    public KeyConfig(int code) {
+        this(getDefaultLabel(code), 1.0f, code);
+    }
+
+    /** 機能キーのコンストラクタ（ウェイト指定） */
+    public KeyConfig(int code, float weight) {
+        this(getDefaultLabel(code), weight, code);
+    }
+
+    /** 内部用マスターコンストラクタ */
+    public KeyConfig(String label, float weight, int code) {
         this.label = label;
         this.weight = weight;
         this.code = code;
     }
 
-    public static boolean isRepeatableLabel(String label) {
-        return "⌫".equals(label) || "◂".equals(label) || "▸".equals(label) || "▴".equals(label) || "▾".equals(label);
-    }
-
     public boolean isRepeatable() {
-        if (code != null) {
-            return CODE_BACKSPACE.equals(code) || CODE_LEFT.equals(code) ||
-                    CODE_RIGHT.equals(code) || CODE_UP.equals(code) || CODE_DOWN.equals(code);
+        switch (code) {
+            case CODE_BACKSPACE:
+            case CODE_LEFT:
+            case CODE_RIGHT:
+            case CODE_UP:
+            case CODE_DOWN:
+                return true;
+            default:
+                return false;
         }
-        return isRepeatableLabel(this.label);
     }
 
     /**
-     * レイアウト文字列（内部形式）を JSON 配列に変換します。
+     * レイアウト（行のリスト）を、人間が読みやすい特定の JSON 形式の文字列に変換します。
+     * 各キーを 1 行に配置するコンパクトな形式です。
      */
-    public static JSONArray layoutToJson(String layoutStr) throws JSONException {
-        JSONArray jsonRows = new JSONArray();
-        if (layoutStr == null || layoutStr.isEmpty()) return jsonRows;
-        String[] lines = layoutStr.split("\n");
-        for (String line : lines) {
-            JSONArray jsonRow = new JSONArray();
-            List<KeyConfig> configs = listFromString(line);
-            for (KeyConfig config : configs) {
-                JSONObject obj = new JSONObject();
-                obj.put("label", config.label);
-                if (config.weight != 1.0f) {
-                    obj.put("weight", config.weight);
-                }
-                if (config.code != null) {
-                    obj.put("code", config.code);
-                }
-                jsonRow.put(obj);
-            }
-            jsonRows.put(jsonRow);
-        }
-        return jsonRows;
-    }
-
-    /**
-     * JSON 配列をレイアウト文字列（内部形式）に変換します。
-     */
-    public static String jsonToLayout(JSONArray jsonRows) throws JSONException {
-        if (jsonRows == null) return "";
+    public static String layoutToJsonString(KeyConfig[][] layout) {
         StringBuilder sb = new StringBuilder();
-        for (int i = 0; i < jsonRows.length(); i++) {
-            JSONArray jsonRow = jsonRows.getJSONArray(i);
-            for (int j = 0; j < jsonRow.length(); j++) {
-                JSONObject obj = jsonRow.getJSONObject(j);
-                String label = obj.getString("label");
-                float weight = (float) obj.optDouble("weight", 1.0);
-                String code = obj.has("code") ? obj.getString("code") : null;
-                sb.append(new KeyConfig(label, weight, code).toString());
-                if (j < jsonRow.length() - 1) sb.append(" ");
+        sb.append("[\n");
+        for (int i = 0; i < layout.length; i++) {
+            sb.append("    [\n");
+            for (int j = 0; j < layout[i].length; j++) {
+                KeyConfig config = layout[i][j];
+                String escapedLabel = config.label.replace("\\", "\\\\").replace("\"", "\\\"");
+                sb.append("      { \"label\": \"").append(escapedLabel).append("\"");
+                if (config.code != CODE_NONE) {
+                    sb.append(", \"code\": \"").append(codeToString(config.code)).append("\"");
+                }
+                if (config.weight != 1.0f) {
+                    sb.append(", \"weight\": ").append(config.weight);
+                }
+                sb.append(" }");
+                if (j < layout[i].length - 1) {
+                    sb.append(",");
+                }
+                sb.append("\n");
             }
-            if (i < jsonRows.length() - 1) sb.append("\n");
+            sb.append("    ]");
+            if (i < layout.length - 1) {
+                sb.append(",");
+            }
+            sb.append("\n");
         }
+        sb.append("  ]");
         return sb.toString();
+    }
+
+    /**
+     * 指定されたマップ（キー：プレフィックス名、値：レイアウト）を、
+     * バックアップ用の JSON 形式文字列に変換します。
+     */
+    public static String backupToJsonString(Map<String, KeyConfig[][]> layouts) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("{\n");
+        List<String> keys = new ArrayList<>(layouts.keySet());
+        for (int i = 0; i < keys.size(); i++) {
+            String key = keys.get(i);
+            sb.append("  \"").append(key).append("\": ");
+            sb.append(layoutToJsonString(layouts.get(key)));
+            if (i < keys.size() - 1) {
+                sb.append(",");
+            }
+            sb.append("\n");
+        }
+        sb.append("}");
+        return sb.toString();
+    }
+
+    /**
+     * JSON 文字列からレイアウト（KeyConfig の 2 次元配列）を復元します。
+     */
+    public static KeyConfig[][] layoutFromAnyString(String s) {
+        if (s == null || s.isEmpty()) {
+            return new KeyConfig[0][0];
+        }
+
+        try {
+            JSONArray json = new JSONArray(s);
+            if (json.length() > 0 && json.optJSONObject(0) != null) {
+                // 1次元配列（1行のみ）の場合、2次元配列に包み直す
+                JSONArray wrapper = new JSONArray();
+                wrapper.put(json);
+                json = wrapper;
+            }
+            int rowCount = json.length();
+            KeyConfig[][] layout = new KeyConfig[rowCount][];
+            for (int i = 0; i < rowCount; i++) {
+                JSONArray jsonRow = json.optJSONArray(i);
+                if (jsonRow == null) {
+                    layout[i] = new KeyConfig[0];
+                    continue;
+                }
+                layout[i] = new KeyConfig[jsonRow.length()];
+                for (int j = 0; j < jsonRow.length(); j++) {
+                    JSONObject obj = jsonRow.optJSONObject(j);
+                    if (obj == null) {
+                        layout[i][j] = new KeyConfig("");
+                        continue;
+                    }
+                    String label = obj.optString("label", "");
+                    float weight = (float) obj.optDouble("weight", 1.0);
+                    int code = obj.has("code") ? stringToCode(obj.getString("code")) : CODE_NONE;
+                    layout[i][j] = new KeyConfig(label, weight, code);
+                }
+            }
+            return layout;
+        } catch (JSONException e) {
+            // 解析不能な場合は空のレイアウトを返す
+            return new KeyConfig[0][0];
+        }
     }
 
     @Override
     public String toString() {
-        StringBuilder sb = new StringBuilder();
-        sb.append(label).append("\u0001").append(weight);
-        if (code != null) {
-            sb.append("\u0001").append(code);
+        JSONObject obj = new JSONObject();
+        try {
+            obj.put("label", label);
+            if (weight != 1.0f) {
+                obj.put("weight", weight);
+            }
+            if (code != CODE_NONE) {
+                obj.put("code", codeToString(code));
+            }
+        } catch (JSONException ignored) {
         }
-        return sb.toString();
+        return obj.toString();
     }
 
+    /** JSON文字列から単一のKeyConfigを生成します */
     public static KeyConfig fromString(String s) {
-        if (s == null || s.isEmpty()) return new KeyConfig("", 1.0f);
-        String[] parts = s.split("\u0001");
-        String label = parts.length > 0 ? parts[0] : "";
-        float weight = 1.0f;
-        String code = null;
-
-        if (parts.length > 1) {
-            try {
-                weight = Float.parseFloat(parts[1]);
-            } catch (NumberFormatException ignored) {
-            }
-        }
-        if (parts.length > 2) {
-            code = parts[2].isEmpty() ? null : parts[2];
-        }
-
-        // 互換性のため、codeが未指定ならlabelから推測する
-        if (code == null) {
-            code = inferCodeFromLabel(label);
-        }
-
-        return new KeyConfig(label, weight, code);
-    }
-
-    public static String inferCodeFromLabel(String label) {
-        if (label == null) return null;
-        switch (label) {
-            case "⇧":
-                return CODE_SHIFT;
-            case "⏎":
-            case "Enter":
-                return CODE_ENTER;
-            case "⌫":
-                return CODE_BACKSPACE;
-            case "⌴":
-            case "Space":
-                return CODE_SPACE;
-            case "Sym":
-                return CODE_SYM;
-            case "Ctrl":
-                return CODE_CTRL;
-            case "Tab":
-                return CODE_TAB;
-            case "◂":
-                return CODE_LEFT;
-            case "▸":
-                return CODE_RIGHT;
-            case "▴":
-                return CODE_UP;
-            case "▾":
-                return CODE_DOWN;
-            case "GAP":
-            case "Gap":
-                return CODE_GAP;
-            default:
-                return null;
+        try {
+            JSONObject obj = new JSONObject(s);
+            String label = obj.optString("label", "");
+            float weight = (float) obj.optDouble("weight", 1.0);
+            int code = obj.has("code") ? stringToCode(obj.getString("code")) : CODE_NONE;
+            return new KeyConfig(label, weight, code);
+        } catch (Exception e) {
+            return new KeyConfig("", 1.0f);
         }
     }
 
-    public static List<KeyConfig> listFromString(String s) {
-        List<KeyConfig> list = new ArrayList<>();
-        if (s == null || s.isEmpty()) return list;
-        String[] keys = s.trim().split("\\s+");
-        for (String k : keys) {
-            list.add(fromString(k));
-        }
-        return list;
-    }
-
-    /** KeyConfigの2次元配列からレイアウト文字列を生成します */
+    /** KeyConfigの2次元配列からレイアウト文字列(JSON形式)を生成します */
     public static String layoutFromConfigArray(KeyConfig[][] data) {
-        StringBuilder sb = new StringBuilder();
-        for (int i = 0; i < data.length; i++) {
-            for (int k = 0; k < data[i].length; k++) {
-                sb.append(data[i][k].toString());
-                if (k < data[i].length - 1) sb.append(" ");
-            }
-            if (i < data.length - 1) sb.append("\n");
-        }
-        return sb.toString().trim();
-    }
-
-    /** レイアウト全体（行のリスト）を保存用の文字列に変換します */
-    public static String layoutToString(List<List<KeyConfig>> layout) {
-        StringBuilder sb = new StringBuilder();
-        for (List<KeyConfig> row : layout) {
-            sb.append(rowToLineString(row)).append("\n");
-        }
-        return sb.toString().trim();
-    }
-
-    /** 1行分のリストを文字列に変換します */
-    public static String rowToLineString(List<KeyConfig> row) {
-        StringBuilder sb = new StringBuilder();
-        for (KeyConfig config : row) {
-            sb.append(config.toString()).append(" ");
-        }
-        return sb.toString().trim();
+        return layoutToJsonString(data);
     }
 }
