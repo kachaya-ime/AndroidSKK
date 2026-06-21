@@ -10,7 +10,9 @@ import java.io.OutputStreamWriter;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Paths;
+import java.util.ArrayList;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
 
@@ -19,6 +21,9 @@ import jdbm.helper.StringComparator;
 import jdbm.RecordManager;
 import jdbm.RecordManagerFactory;
 
+/**
+ * SKK辞書ファイルを読み込み、JDBM形式のバイナリ辞書を構築するクラス。
+ */
 public class DictBuilder {
     static String SYS_DIC_NAME = "skk_main_dict";
     static String RES_RAW_DIR = "app/src/main/res/raw/";
@@ -29,11 +34,22 @@ public class DictBuilder {
 
     static Map<String, LinkedHashSet<String>> map = new TreeMap<>();
 
-    static void readDic(String filename) throws IOException {
+    /**
+     * SKK辞書ファイルを読み込み、内部マップにマージします。
+     *
+     * @param filename 辞書ファイルのパス
+     * @param encoding ファイルのエンコーディング (EUC-JP, UTF-8など)
+     * @throws IOException I/Oエラーが発生した場合
+     */
+    static void readDic(String filename, String encoding) throws IOException {
         System.err.println(filename);
         File file = new File(filename);
+        if (!file.exists()) {
+            System.err.println("Skip: File not found: " + filename);
+            return;
+        }
         FileInputStream fis = new FileInputStream(file);
-        InputStreamReader isr = new InputStreamReader(fis, "EUC-JP");
+        InputStreamReader isr = new InputStreamReader(fis, encoding);
         BufferedReader br = new BufferedReader(isr);
         String line;
         while ((line = br.readLine()) != null) {
@@ -52,7 +68,15 @@ public class DictBuilder {
             }
 
             String key = line.substring(0, idx);
-            String[] values = line.substring(idx + 1).split("/");
+            String candidatesPart = line.substring(idx + 1);
+            if (candidatesPart.startsWith("/")) {
+                candidatesPart = candidatesPart.substring(1);
+            }
+            if (candidatesPart.endsWith("/")) {
+                candidatesPart = candidatesPart.substring(0, candidatesPart.length() - 1);
+            }
+
+            List<String> values = splitCandidates(candidatesPart);
 
             LinkedHashSet<String> set = map.get(key);
             if (set == null) {
@@ -79,6 +103,36 @@ public class DictBuilder {
         br.close();
     }
 
+    /**
+     * スラッシュ区切りの候補文字列を分割します。括弧のネストを考慮します。
+     *
+     * @param s 候補文字列
+     * @return 分割された候補のリスト
+     */
+    private static List<String> splitCandidates(String s) {
+        List<String> res = new ArrayList<>();
+        int start = 0;
+        int nest = 0;
+        for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
+            if (c == '(') nest++;
+            else if (c == ')') nest--;
+            else if (c == '/' && nest == 0) {
+                res.add(s.substring(start, i));
+                start = i + 1;
+            }
+        }
+        if (start < s.length()) {
+            res.add(s.substring(start));
+        }
+        return res;
+    }
+
+    /**
+     * 読み込んだ辞書データをテキストファイルおよびJDBMデータベースに出力します。
+     *
+     * @throws IOException I/Oエラーが発生した場合
+     */
     static void writeDic() throws IOException {
         BufferedWriter bw = new BufferedWriter(new OutputStreamWriter(new FileOutputStream(
                 new File(SYS_DIC_NAME + ".txt")), "UTF-8"));
@@ -112,13 +166,57 @@ public class DictBuilder {
         bw.close();
     }
 
+    /**
+     * 辞書構築のメインエントリポイント。
+     * 各種辞書ファイルを順番に読み込み、最終的な辞書を構築します。
+     *
+     * @param argv コマンドライン引数
+     * @throws Exception 構築中にエラーが発生した場合
+     */
     static public void main(String argv[]) throws Exception {
 
-        readDic("./data/SKK-JISYO.L");
-        readDic("./data/SKK-JISYO.geo");
-        readDic("./data/SKK-JISYO.jinmei");
-        readDic("./data/SKK-JISYO.propernoun");
-        readDic("./data/SKK-JISYO.station");
+        // 1. 最優先: 標準SKK辞書 (基礎語彙)
+        readDic("./data/SKK-JISYO.L", "EUC-JP");
+
+        // 2. 現代語・一般語の補完 (Sudachi由来の頻度順)
+        readDic("./work/名詞.skk", "UTF-8");
+        readDic("./work/サ変名詞.skk", "UTF-8");
+        readDic("./work/副詞可能名詞.skk", "UTF-8");
+        readDic("./work/動詞.skk", "UTF-8");
+        readDic("./work/形容詞.skk", "UTF-8");
+        readDic("./work/形状詞.skk", "UTF-8");
+        readDic("./work/副詞.skk", "UTF-8");
+        readDic("./work/連体詞.skk", "UTF-8");
+        readDic("./work/接続詞.skk", "UTF-8");
+        // readDic("./work/感動詞.skk", "UTF-8");
+
+        // 3. 固有名詞 (標準辞書とSudachiの新しい語彙を交互に)
+        readDic("./data/SKK-JISYO.jinmei", "EUC-JP");
+        readDic("./work/人名.skk", "UTF-8");
+
+        readDic("./data/SKK-JISYO.geo", "EUC-JP");
+        readDic("./work/地名.skk", "UTF-8");
+
+        readDic("./data/SKK-JISYO.station", "EUC-JP");
+        readDic("./work/駅名.skk", "UTF-8");
+
+        readDic("./data/SKK-JISYO.propernoun", "EUC-JP");
+        readDic("./work/組織名.skk", "UTF-8");
+        readDic("./work/固有名詞.skk", "UTF-8");
+
+        // 4. その他補助・記号類
+        readDic("./work/代名詞.skk", "UTF-8");
+        readDic("./work/助数詞.skk", "UTF-8");
+        readDic("./work/数詞.skk", "UTF-8");
+        readDic("./work/接頭辞.skk", "UTF-8");
+        readDic("./work/接尾辞.skk", "UTF-8");
+        readDic("./work/動詞的接尾辞.skk", "UTF-8");
+        readDic("./work/形容詞的接尾辞.skk", "UTF-8");
+        // readDic("./work/英数字.skk", "UTF-8");
+        readDic("./work/活用語.skk", "UTF-8");
+        readDic("./work/非活用語.skk", "UTF-8");
+        // readDic("./work/記号.skk", "UTF-8");
+        // readDic("./work/補助記号.skk", "UTF-8");
 
         writeDic();
 

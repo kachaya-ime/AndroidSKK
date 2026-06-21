@@ -24,6 +24,10 @@ google-services.json
 
 # Build output
 /app/build/
+/app/release/
 
 # Project exclude paths
 /tool/build/
+/work/
+/data/*
+!/data/prepare.bat
