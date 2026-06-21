@@ -250,6 +250,26 @@ public class SudachiDictConverter {
                         // 英単語表記（大文字・小文字・数字のみ）を除外
                         if (entry.surface.matches("^[a-zA-Z0-9]+$")) continue;
 
+                        // かなのみの表記（surface）について、ひらがなに戻したときに読み（hiragana）と一致しないものは除外
+                        // （"ゾーッと" や "ぞォッと" などの、読みと表記が異なるエントリを捨てる）
+                        // ただし、旧仮名（ゐ、ゑ）が含まれることで不一致となっている場合は許容する
+                        if (DictUtil.isKanaOnly(entry.surface)) {
+                            String hSurface = DictUtil.toHiragana(entry.surface);
+                            if (!hSurface.equals(entry.hiragana)) {
+                                // ゐ->い, ゑ->え に置換して一致するか確認
+                                String normalizedHSurface = hSurface.replace('ゐ', 'い').replace('ゑ', 'え');
+                                if (!normalizedHSurface.equals(entry.hiragana)) {
+                                    continue;
+                                }
+                            }
+                        }
+
+                        // 表記（surface）の末尾が長音「ー」または「〜」で、読み（hiragana）の末尾がそうでなければ除外（「嫌ー」「いや〜」など）
+                        if ((entry.surface.endsWith("ー") || entry.surface.endsWith("〜") || entry.surface.endsWith("～"))
+                                && !entry.hiragana.endsWith("ー")) {
+                            continue;
+                        }
+
                         // 品詞体系に基づいた分類
                         switch (entry.pos1) {
                             case "接頭辞" -> prefixEntries.add(entry);

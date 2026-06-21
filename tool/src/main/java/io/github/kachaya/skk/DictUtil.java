@@ -54,7 +54,7 @@ public class DictUtil {
     }
 
     /**
-     * 文字列内のカタカナをひらがなに変換します。
+     * 文字列内のカタカナをひらがなに変換します。波ダッシュ「〜」は長音「ー」に正規化します。
      *
      * @param s 変換対象の文字列
      * @return 変換後のひらがな文字列
@@ -66,6 +66,8 @@ public class DictUtil {
             char c = s.charAt(i);
             if (c >= 'ァ' && c <= 'ヶ') {
                 sb.append((char) (c - 'ァ' + 'ぁ'));
+            } else if (c == '〜' || c == '～') {
+                sb.append('ー');
             } else {
                 sb.append(c);
             }
@@ -93,23 +95,23 @@ public class DictUtil {
     }
 
     /**
-     * 指定された文字がひらがなかどうかを判定します。長音「ー」も含みます。
+     * 指定された文字がひらがなかどうかを判定します。長音「ー」や波ダッシュ「〜」も含みます。
      *
      * @param c 判定対象の文字
      * @return ひらがなであれば true
      */
     public static boolean isHiragana(char c) {
-        return (c >= 'ぁ' && c <= 'ゖ') || c == 'ー';
+        return (c >= 'ぁ' && c <= 'ゖ') || c == 'ー' || c == '〜' || c == '～';
     }
 
     /**
-     * 指定された文字がカタカナかどうかを判定します。長音「ー」も含みます。
+     * 指定された文字がカタカナかどうかを判定します。長音「ー」や波ダッシュ「〜」も含みます。
      *
      * @param c 判定対象の文字
      * @return カタカナであれば true
      */
     public static boolean isKatakana(char c) {
-        return (c >= 'ァ' && c <= 'ヶ') || c == 'ー';
+        return (c >= 'ァ' && c <= 'ヶ') || c == 'ー' || c == '〜' || c == '～';
     }
 
     /**
