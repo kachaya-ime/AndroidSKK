@@ -54,7 +54,7 @@ public class DictUtil {
     }
 
     /**
-     * 文字列内のカタカナをひらがなに変換します。波ダッシュ「〜」は長音「ー」に正規化します。
+     * 文字列内のカタカナをひらがなに変換します。
      *
      * @param s 変換対象の文字列
      * @return 変換後のひらがな文字列
@@ -66,8 +66,6 @@ public class DictUtil {
             char c = s.charAt(i);
             if (c >= 'ァ' && c <= 'ヶ') {
                 sb.append((char) (c - 'ァ' + 'ぁ'));
-            } else if (c == '〜' || c == '～') {
-                sb.append('ー');
             } else {
                 sb.append(c);
             }

@@ -123,15 +123,30 @@ public class SudachiDictConverter {
          * <p>
          * 正規化表記と送り仮名のパターン（漢字を除いた末尾の仮名部分）が一致する場合、
          * 漢字の表記揺れ（異体字など）として許容し、変換候補として採用します。
+         * 歴史的仮名遣い（旧仮名）や、小書き文字を使わない古い表記（「頰つぺた」など）も
+         * 許容範囲として扱います。
          * </p>
          *
          * @return 標準的、または許容される送り仮名であれば true
          */
         boolean isStandardOkurigana() {
             if (normalizedForm.equals(surface)) return true;
+
+            // 表記を正規化（カタカナ・旧仮名・小書き文字・波ダッシュ・ヶ を統一）して比較
+            String hSurface = normalizeForConsistency(surface);
+            String hNorm = normalizeForConsistency(normalizedForm);
+
+            if (hNorm.equals(hSurface)) return true;
+
             String okuriSurface = extractOkurigana(surface);
             String okuriNorm = extractOkurigana(normalizedForm);
-            return !okuriNorm.isEmpty() && okuriSurface.equals(okuriNorm);
+
+            if (okuriNorm.isEmpty()) return false;
+
+            // 送り仮名部分についても同様に正規化して比較
+            String s1 = normalizeForConsistency(okuriSurface);
+            String s2 = normalizeForConsistency(okuriNorm);
+            return s1.equals(s2);
         }
 
         /**
@@ -244,29 +259,20 @@ public class SudachiDictConverter {
 //                        if (entry.lid != entry.rid) continue;
                         if (!entry.splitType.equals("A")) continue;
 
-                        // 表記（surface）に半角スペースが含まれるものは除外する
-                        if (entry.surface.contains(" ")) continue;
+                        // 表記（surface）に半角スペースや句読点が含まれるものは除外する
+                        // （"." は略称などで使われるため、ここでは除外対象から外す）
+                        if (entry.surface.contains(" ") || entry.surface.contains("、") ||
+                                entry.surface.contains("。") || entry.surface.contains(",")) {
+                            continue;
+                        }
 
                         // 英単語表記（大文字・小文字・数字のみ）を除外
                         if (entry.surface.matches("^[a-zA-Z0-9]+$")) continue;
 
-                        // かなのみの表記（surface）について、ひらがなに戻したときに読み（hiragana）と一致しないものは除外
-                        // （"ゾーッと" や "ぞォッと" などの、読みと表記が異なるエントリを捨てる）
-                        // ただし、旧仮名（ゐ、ゑ）が含まれることで不一致となっている場合は許容する
-                        if (DictUtil.isKanaOnly(entry.surface)) {
-                            String hSurface = DictUtil.toHiragana(entry.surface);
-                            if (!hSurface.equals(entry.hiragana)) {
-                                // ゐ->い, ゑ->え に置換して一致するか確認
-                                String normalizedHSurface = hSurface.replace('ゐ', 'い').replace('ゑ', 'え');
-                                if (!normalizedHSurface.equals(entry.hiragana)) {
-                                    continue;
-                                }
-                            }
-                        }
-
-                        // 表記（surface）の末尾が長音「ー」または「〜」で、読み（hiragana）の末尾がそうでなければ除外（「嫌ー」「いや〜」など）
-                        if ((entry.surface.endsWith("ー") || entry.surface.endsWith("〜") || entry.surface.endsWith("～"))
-                                && !entry.hiragana.endsWith("ー")) {
+                        // 表記に含まれる仮名や記号が、読みの中に正しい順序で現れるかチェックする
+                        // （「北國」は仮名がないのでパス、「発しん」は「しん」が含まれるのでパス、
+                        //   「ボー然」は「ぼー」が「ぼうぜん」に含まれないので除外）
+                        if (!isKanaConsistent(entry.surface, entry.hiragana)) {
                             continue;
                         }
 
@@ -603,6 +609,59 @@ public class SudachiDictConverter {
             return "(concat \"" + escaped + "\")";
         }
         return s;
+    }
+
+    /**
+     * 表記（surface）に含まれる仮名や記号が、読み（hiragana）と矛盾していないか確認します。
+     * 漢字を除いた「かな部分」を取り出し、それが読みの中に正しい順序で存在するかを判定します。
+     *
+     * @param surface  表記
+     * @param hiragana 読み（ひらがな）
+     * @return 矛盾がなければ true
+     */
+    private boolean isKanaConsistent(String surface, String hiragana) {
+        String nReading = normalizeForConsistency(hiragana);
+        int lastPos = 0;
+        StringBuilder currentSegment = new StringBuilder();
+
+        for (int i = 0; i < surface.length(); i++) {
+            char c = surface.charAt(i);
+            if (DictUtil.isKana(c)) {
+                currentSegment.append(c);
+            } else {
+                if (currentSegment.length() > 0) {
+                    String segment = normalizeForConsistency(currentSegment.toString());
+                    int foundPos = nReading.indexOf(segment, lastPos);
+                    if (foundPos == -1) return false;
+                    lastPos = foundPos + segment.length();
+                    currentSegment.setLength(0);
+                }
+            }
+        }
+        if (currentSegment.length() > 0) {
+            String segment = normalizeForConsistency(currentSegment.toString());
+            int foundPos = nReading.indexOf(segment, lastPos);
+            return foundPos != -1;
+        }
+        return true;
+    }
+
+    /**
+     * 比較のため、文字列を正規化（かな変換、旧仮名、小書き文字、波ダッシュ、ヶ/ケ/か、歴史的仮名遣いの統一）します。
+     *
+     * @param s 対象文字列
+     * @return 正規化後の文字列
+     */
+    private static String normalizeForConsistency(String s) {
+        if (s == null) return "";
+        return DictUtil.toHiragana(s)
+                .replace("ゐ", "い").replace("ゑ", "え").replace("を", "お")
+                .replace("っ", "つ").replace("ゃ", "や").replace("ゅ", "ゆ").replace("ょ", "よ")
+                .replace("〜", "ー").replace("～", "ー")
+                .replace("ゖ", "か").replace("け", "か").replace("が", "か").replace("げ", "か")
+                .replace("ぢ", "じ").replace("づ", "ず")
+                .replace("は", "わ").replace("ひ", "い").replace("へ", "え").replace("ほ", "お")
+                .replace("ん", "つ");
     }
 
     /**
