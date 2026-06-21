@@ -244,6 +244,9 @@ public class SudachiDictConverter {
 //                        if (entry.lid != entry.rid) continue;
                         if (!entry.splitType.equals("A")) continue;
 
+                        // 表記（surface）に半角スペースが含まれるものは除外する
+                        if (entry.surface.contains(" ")) continue;
+
                         // 英単語表記（大文字・小文字・数字のみ）を除外
                         if (entry.surface.matches("^[a-zA-Z0-9]+$")) continue;
 
