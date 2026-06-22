@@ -27,7 +27,7 @@ import java.util.TreeMap;
  *   <li>助数詞に対して SKK 標準の数値変換テンプレート（#0〜#3）を付与</li>
  *   <li>接頭辞・接尾辞への SKK 特有のマーカー（&gt;）の付与</li>
  *   <li>正規化表記（Normalized Form）を利用しつつ、「憂う」のような読みの異なる語彙バリエーションを許容</li>
- *   <li>異体字、旧字体、歴史的仮名遣いなど、日本語特有の表記揺れを柔軟に考慮したマッチング</li>
+ *   <li>異体字、旧字体など、日本語特有の表記揺れを柔軟に考慮したマッチング</li>
  * </ul>
  * </p>
  */
@@ -120,12 +120,17 @@ public class SudachiDictConverter {
         }
 
         /**
+         * 表記が英数字のみ（abbrevモード用）かどうかを判定します。
+         */
+        boolean isAbbrev() {
+            return surface.matches("^[a-zA-Z0-9._-]+$");
+        }
+
+        /**
          * 送り仮名が適切かどうかをチェックします。
          * <p>
          * 正規化表記と送り仮名のパターン（漢字を除いた末尾の仮名部分）が一致する場合、
          * 漢字の表記揺れ（異体字など）として許容し、変換候補として採用します。
-         * 歴史的仮名遣い（旧仮名）や、小書き文字を使わない古い表記（「頰つぺた」など）も
-         * 許容範囲として扱います。
          * </p>
          *
          * @return 標準的、または許容される送り仮名であれば true
@@ -133,7 +138,17 @@ public class SudachiDictConverter {
         boolean isStandardOkurigana() {
             if (normalizedForm.equals(surface)) return true;
 
-            // 表記を正規化（カタカナ・旧仮名・小書き文字・波ダッシュ・ヶ を統一）して比較
+            // 活用語において、旧かな（ゐゑを）や大書きの「つやゆよ」が
+            // 正規化表記と異なって含まれる場合は、旧式表記として除外する。
+            if (!type.equals("*")) {
+                if (surface.matches(".*[ゐゑを].*") && !normalizedForm.matches(".*[ゐゑを].*")) return false;
+                if (surface.contains("つ") && normalizedForm.contains("っ")) return false;
+                if (surface.contains("や") && normalizedForm.contains("ゃ")) return false;
+                if (surface.contains("ゆ") && normalizedForm.contains("ゅ")) return false;
+                if (surface.contains("よ") && normalizedForm.contains("ょ")) return false;
+            }
+
+            // 表記を正規化して比較
             String hSurface = normalizeForConsistency(surface);
             String hNorm = normalizeForConsistency(normalizedForm);
 
@@ -141,18 +156,21 @@ public class SudachiDictConverter {
 
             // 読み（hiragana）が正規化表記の送り仮名で終わっていない場合、
             // それは単なる送り仮名の揺れではなく、別の語彙や活用（例：「憂う」vs「憂える」）
-            // である可能性が高いため、正規の語彙として許容する。
-            // 逆に、読みが一致したまま送り仮名だけが異なる（例：「行う」vs「行なう」）場合は、
-            // 送り方の揺れとみなして、正規化表記側を優先し除外する。
+            // である可能性が高いため、原則として許容する。
             String okuriNorm = extractOkurigana(normalizedForm);
             if (!okuriNorm.isEmpty() && !hiragana.endsWith(okuriNorm)) {
+                // 旧かなづかいの違い（例：読みが「う」で終わるのに表記が「ふ」等）を判定。
+                // normalizeForConsistency にはハ行転呼音（はひふへほ -> わいうえお）を含めていないため、ここで個別にチェックする。
+                String nReading = hiragana.replace("は", "わ").replace("ひ", "い").replace("ふ", "う").replace("へ", "え").replace("ほ", "お");
+                if (nReading.endsWith(okuriNorm)) return false;
+
                 String kSurface = surface.replaceAll("[ぁ-ゖァ-ヺー〜～]+", "");
                 String kNorm = normalizedForm.replaceAll("[ぁ-ゖァ-ヺー〜～]+", "");
                 if (!kSurface.isEmpty() && kSurface.equals(kNorm)) return true;
             }
 
             String okuriSurface = extractOkurigana(surface);
-            if (okuriNorm.isEmpty()) return false;
+            if (okuriNorm.isEmpty()) return okuriSurface.isEmpty();
 
             // 送り仮名部分についても同様に正規化して比較
             String s1 = normalizeForConsistency(okuriSurface);
@@ -276,9 +294,6 @@ public class SudachiDictConverter {
                                 entry.surface.contains("。") || entry.surface.contains(",")) {
                             continue;
                         }
-
-                        // 英単語表記（大文字・小文字・数字のみ）を除外
-                        if (entry.surface.matches("^[a-zA-Z0-9]+$")) continue;
 
                         // 表記に含まれる仮名や記号が、読みの中に正しい順序で現れるかチェックする
                         // （「北國」は仮名がないのでパス、「発しん」は「しん」が含まれるのでパス、
@@ -412,8 +427,14 @@ public class SudachiDictConverter {
         System.out.println("Generating SKK dictionary: " + path.toAbsolutePath());
         Map<String, List<SudachiEntry>> okuriAri = new TreeMap<>();
         Map<String, List<SudachiEntry>> okuriNasi = new TreeMap<>();
+        Map<String, List<SudachiEntry>> abbrev = new TreeMap<>();
 
         for (SudachiEntry entry : entries) {
+            if (entry.isAbbrev()) {
+                abbrev.computeIfAbsent(entry.surface.toLowerCase(), k -> new ArrayList<>()).add(entry);
+                continue;
+            }
+
             if (!entry.type.equals("*")) {
                 addOkuriAri(entry, okuriAri, okuriNasi);
             } else {
@@ -423,9 +444,11 @@ public class SudachiDictConverter {
 
         try (BufferedWriter writer = Files.newBufferedWriter(path, StandardCharsets.UTF_8)) {
             writer.write(";; okuri-ari entries.\n");
-            writeEntries(writer, okuriAri, true);
+            writeEntries(writer, okuriAri, true, false);
             writer.write(";; okuri-nasi entries.\n");
-            writeEntries(writer, okuriNasi, false);
+            writeEntries(writer, okuriNasi, false, false);
+            writer.write(";; abbrev entries.\n");
+            writeEntries(writer, abbrev, false, true);
         }
         System.out.println("Success. Output written to " + path.getFileName());
     }
@@ -518,6 +541,12 @@ public class SudachiDictConverter {
      * 助数詞の場合は読みの先頭に '#' を付与します。
      */
     private void addOkuriNasi(SudachiEntry entry, Map<String, List<SudachiEntry>> okuriNasi) {
+        // 送り仮名が非標準的なもの（揺れや間違い）を除外
+        if (!entry.isStandardOkurigana()) {
+            mismatchLogs.add(entry.rawLine);
+            return;
+        }
+
         // 表記と読みが同じ「ひらがなのみ」の単語はスキップ
         if (entry.surface.equals(entry.hiragana)) return;
 
@@ -598,7 +627,7 @@ public class SudachiDictConverter {
      * マップに蓄積された候補群を SKK 辞書形式で書き出します。
      * 助数詞（#）に対するテンプレート生成や、スラッシュのエスケープ処理を行います。
      */
-    private void writeEntries(BufferedWriter writer, Map<String, List<SudachiEntry>> map, boolean okuriAri) throws IOException {
+    private void writeEntries(BufferedWriter writer, Map<String, List<SudachiEntry>> map, boolean okuriAri, boolean isAbbrev) throws IOException {
         for (Map.Entry<String, List<SudachiEntry>> entry : map.entrySet()) {
             String reading = entry.getKey();
             List<SudachiEntry> candidates = entry.getValue();
@@ -627,6 +656,13 @@ public class SudachiDictConverter {
                             }
                         }
                         candidateText = e.surface.substring(0, lastNonKana + 1);
+                    }
+                } else if (isAbbrev) {
+                    // abbrev の場合、読み（カタカナ）を候補とする
+                    candidateText = e.reading;
+                    // 見出し語と同じ候補は除外する（例：daidalos /daidalos/）
+                    if (candidateText.equalsIgnoreCase(reading)) {
+                        continue;
                     }
                 } else {
                     candidateText = e.surface;
@@ -727,8 +763,7 @@ public class SudachiDictConverter {
                 .replace("っ", "つ").replace("ゃ", "や").replace("ゅ", "ゆ").replace("ょ", "よ")
                 .replace("〜", "ー").replace("～", "ー")
                 .replace("ゖ", "か").replace("け", "か").replace("が", "か").replace("げ", "か")
-                .replace("ぢ", "じ").replace("づ", "ず")
-                .replace("は", "わ").replace("ひ", "い").replace("ふ", "う").replace("へ", "え").replace("ほ", "お");
+                .replace("ぢ", "じ").replace("づ", "ず");
     }
 
     /**
