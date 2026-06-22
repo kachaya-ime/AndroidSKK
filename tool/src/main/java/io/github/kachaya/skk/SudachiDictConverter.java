@@ -22,11 +22,12 @@ import java.util.TreeMap;
  * <p>
  * このコンバーターは以下の特徴を持ちます：
  * <ul>
- *   <li>送り仮名を自動判定し、SKK の「送りあり（okuri-ari）」形式を生成</li>
+ *   <li>Sudachi の活用型（五段、一段等）に基づき、SKK の「送りあり（okuri-ari）」エントリを機械的に生成</li>
+ *   <li>原則として「終止形」のみを登録対象とし、撥音便などの活用形や不適切な送り仮名の混入を防止</li>
  *   <li>助数詞に対して SKK 標準の数値変換テンプレート（#0〜#3）を付与</li>
  *   <li>接頭辞・接尾辞への SKK 特有のマーカー（&gt;）の付与</li>
- *   <li>正規化表記（Normalized Form）を利用した不適切な送り仮名エントリの除外</li>
- *   <li>異体字や旧字体など、漢字の表記揺れの許容</li>
+ *   <li>正規化表記（Normalized Form）を利用しつつ、「憂う」のような読みの異なる語彙バリエーションを許容</li>
+ *   <li>異体字、旧字体、歴史的仮名遣いなど、日本語特有の表記揺れを柔軟に考慮したマッチング</li>
  * </ul>
  * </p>
  */
@@ -138,9 +139,19 @@ public class SudachiDictConverter {
 
             if (hNorm.equals(hSurface)) return true;
 
-            String okuriSurface = extractOkurigana(surface);
+            // 読み（hiragana）が正規化表記の送り仮名で終わっていない場合、
+            // それは単なる送り仮名の揺れではなく、別の語彙や活用（例：「憂う」vs「憂える」）
+            // である可能性が高いため、正規の語彙として許容する。
+            // 逆に、読みが一致したまま送り仮名だけが異なる（例：「行う」vs「行なう」）場合は、
+            // 送り方の揺れとみなして、正規化表記側を優先し除外する。
             String okuriNorm = extractOkurigana(normalizedForm);
+            if (!okuriNorm.isEmpty() && !hiragana.endsWith(okuriNorm)) {
+                String kSurface = surface.replaceAll("[ぁ-ゖァ-ヺー〜～]+", "");
+                String kNorm = normalizedForm.replaceAll("[ぁ-ゖァ-ヺー〜～]+", "");
+                if (!kSurface.isEmpty() && kSurface.equals(kNorm)) return true;
+            }
 
+            String okuriSurface = extractOkurigana(surface);
             if (okuriNorm.isEmpty()) return false;
 
             // 送り仮名部分についても同様に正規化して比較
@@ -430,36 +441,27 @@ public class SudachiDictConverter {
         String surface = entry.surface;
         String hiragana = entry.hiragana;
 
+        // 活用語の場合、原則として終止形のみを登録対象とする
+        // （撥音便などの活用形や、送り仮名の過剰なバリエーションを排除するため）
+        if (entry.form != null && !entry.form.startsWith("終止形")) {
+            return;
+        }
+
         // 送り仮名が非標準的なもの（揺れや間違い）を除外
         if (!entry.isStandardOkurigana()) {
             mismatchLogs.add(entry.rawLine);
             return;
         }
 
-        int lastNonKana = -1;
-        for (int i = 0; i < surface.length(); i++) {
-            if (!DictUtil.isKana(surface.charAt(i))) {
-                lastNonKana = i;
-            }
-        }
-
-        if (lastNonKana == -1) {
-            addOkuriNasi(entry, okuriNasi);
+        // 表記と読みが一致するものは、送りありエントリとしては登録しない
+        if (surface.equals(hiragana) || surface.equals(DictUtil.toKatakana(hiragana))) {
             return;
         }
 
-        int okuriStart = lastNonKana + 1;
-        if (okuriStart >= surface.length()) {
-            addOkuriNasi(entry, okuriNasi);
-            return;
-        }
-
-        String okuriGana = surface.substring(okuriStart);
-        char firstOkuri = okuriGana.charAt(0);
-        char[] okuriChars = getOkuriChars(firstOkuri);
-
-        if (hiragana.endsWith(okuriGana)) {
-            String readingStem = hiragana.substring(0, hiragana.length() - okuriGana.length());
+        // 活用型に基づいた機械的生成
+        char[] okuriChars = getOkuriCharsFromType(entry.type, hiragana);
+        if (okuriChars != null && hiragana.length() > 1) {
+            String readingStem = hiragana.substring(0, hiragana.length() - 1);
             for (char okuriChar : okuriChars) {
                 String key = readingStem + okuriChar;
                 if (entry.pos1.equals("接頭辞")) {
@@ -469,8 +471,44 @@ public class SudachiDictConverter {
                 }
                 okuriAri.computeIfAbsent(key, k -> new ArrayList<>()).add(entry);
             }
+            return;
+        }
+
+        // 活用型が判定できない場合のフォールバック
+        int lastNonKanaPos = -1;
+        for (int i = 0; i < surface.length(); i++) {
+            if (!DictUtil.isKana(surface.charAt(i))) {
+                lastNonKanaPos = i;
+            }
+        }
+
+        if (lastNonKanaPos == -1) {
+            addOkuriNasi(entry, okuriNasi);
+            return;
+        }
+
+        int okuriStart = lastNonKanaPos + 1;
+        if (okuriStart >= surface.length()) {
+            addOkuriNasi(entry, okuriNasi);
+            return;
+        }
+
+        String okuriGana = surface.substring(okuriStart);
+        char firstOkuri = okuriGana.charAt(0);
+        char[] triggers = getOkuriChars(firstOkuri);
+
+        if (hiragana.endsWith(okuriGana)) {
+            String readingStem = hiragana.substring(0, hiragana.length() - okuriGana.length());
+            for (char okuriChar : triggers) {
+                String key = readingStem + okuriChar;
+                if (entry.pos1.equals("接頭辞")) {
+                    key = key + ">";
+                } else if (entry.pos1.equals("接尾辞")) {
+                    key = ">" + key;
+                }
+                okuriAri.computeIfAbsent(key, k -> new ArrayList<>()).add(entry);
+            }
         } else {
-            // 読みが送り仮名で終わっていない（読みと送りが矛盾している）場合は除外
             mismatchLogs.add(entry.rawLine);
         }
     }
@@ -507,7 +545,7 @@ public class SudachiDictConverter {
      */
     private char[] getOkuriChars(char c) {
         return switch (c) {
-            case 'あ' -> new char[]{'a'}; case 'い' -> new char[]{'i'}; case 'う' -> new char[]{'u'}; case 'え' -> new char[]{'e'}; case 'お' -> new char[]{'o'};
+            case 'あ' -> new char[]{'a'}; case 'い' -> new char[]{'i'}; case 'う' -> new char[]{'u', 'w'}; case 'え' -> new char[]{'e'}; case 'お' -> new char[]{'o'};
             case 'か', 'き', 'く', 'け', 'こ' -> new char[]{'k'};
             case 'さ', 'し', 'す', 'せ', 'そ' -> new char[]{'s'};
             case 'た', 'ち', 'つ', 'て', 'と' -> new char[]{'t'};
@@ -528,8 +566,32 @@ public class SudachiDictConverter {
             case 'ぁ', 'ぃ', 'ぅ', 'ぇ', 'ぉ' -> getOkuriChars((char) (c + 1));
             case 'ゃ', 'ゅ', 'ょ' -> new char[]{'y'};
             case 'っ' -> new char[]{'t'};
-            default -> new char[]{Character.toLowerCase(c)};
+            default -> {
+                if (c >= 'a' && c <= 'z') yield new char[]{c};
+                yield new char[0];
+            }
         };
+    }
+
+    /**
+     * Sudachi の活用型と読みから、SKK の送り識別子（ローマ字）を機械的に決定します。
+     *
+     * @param type     活用型（五段-サ行、一段、形容詞など）
+     * @param hiragana 読み（ひらがな）
+     * @return 送り識別子の配列、判定不能な場合は null
+     */
+    private char[] getOkuriCharsFromType(String type, String hiragana) {
+        if (type == null || hiragana == null || hiragana.isEmpty()) return null;
+
+        // 形容詞は「〜い(i)」「〜く(k)」の両方の活用を考慮
+        if (type.contains("形容詞")) return new char[]{'i', 'k'};
+
+        // 五段-ワ行は活用によって送り仮名の先頭が w, i, u, e, o に変化するため、これらを網羅する
+        if (type.contains("五段-ワ行")) return new char[]{'w', 'i', 'u', 'e', 'o'};
+
+        // その他の動詞・助動詞などは、終止形の末尾の文字から送り識別子を決定する
+        // これによりカ行なら 'k'、サ行なら 's' など、その行のコンソナントが選ばれる
+        return getOkuriChars(hiragana.charAt(hiragana.length() - 1));
     }
 
     /**
@@ -553,13 +615,19 @@ public class SudachiDictConverter {
                 String candidateText;
                 if (okuriAri) {
                     // 送りありの場合、表層形から送り仮名部分を削除した漢字部分のみを候補とする
-                    int lastNonKana = -1;
-                    for (int i = 0; i < e.surface.length(); i++) {
-                        if (!DictUtil.isKana(e.surface.charAt(i))) {
-                            lastNonKana = i;
+                    char[] triggers = getOkuriCharsFromType(e.type, e.hiragana);
+                    if (triggers != null && !e.surface.isEmpty()) {
+                        // 機械的生成の場合は最後の一文字を送り仮名として除去
+                        candidateText = e.surface.substring(0, e.surface.length() - 1);
+                    } else {
+                        int lastNonKana = -1;
+                        for (int i = 0; i < e.surface.length(); i++) {
+                            if (!DictUtil.isKana(e.surface.charAt(i))) {
+                                lastNonKana = i;
+                            }
                         }
+                        candidateText = e.surface.substring(0, lastNonKana + 1);
                     }
-                    candidateText = e.surface.substring(0, lastNonKana + 1);
                 } else {
                     candidateText = e.surface;
                 }
@@ -660,8 +728,7 @@ public class SudachiDictConverter {
                 .replace("〜", "ー").replace("～", "ー")
                 .replace("ゖ", "か").replace("け", "か").replace("が", "か").replace("げ", "か")
                 .replace("ぢ", "じ").replace("づ", "ず")
-                .replace("は", "わ").replace("ひ", "い").replace("へ", "え").replace("ほ", "お")
-                .replace("ん", "つ");
+                .replace("は", "わ").replace("ひ", "い").replace("ふ", "う").replace("へ", "え").replace("ほ", "お");
     }
 
     /**
