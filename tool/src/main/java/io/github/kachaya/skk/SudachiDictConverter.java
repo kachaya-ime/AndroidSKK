@@ -123,7 +123,7 @@ public class SudachiDictConverter {
          * 表記が英数字のみ（abbrevモード用）かどうかを判定します。
          */
         boolean isAbbrev() {
-            return surface.matches("^[a-zA-Z0-9._-]+$");
+            return DictUtil.isEnglishWord(surface);
         }
 
         /**
@@ -131,6 +131,11 @@ public class SudachiDictConverter {
          * <p>
          * 正規化表記と送り仮名のパターン（漢字を除いた末尾の仮名部分）が一致する場合、
          * 漢字の表記揺れ（異体字など）として許容し、変換候補として採用します。
+         * </p>
+         * <p>
+         * また、日本語の表記ルールとしては「送り仮名の明記（より多く送る、例：悪だくみ）」は
+         * 許容されるべきバリエーションであるため、正規化表記の送り仮名を末尾に含む場合は採用します。
+         * 一方で「送り仮名の省略（例：押え）」は除外します。
          * </p>
          *
          * @return 標準的、または許容される送り仮名であれば true
@@ -149,8 +154,8 @@ public class SudachiDictConverter {
             }
 
             // 表記を正規化して比較
-            String hSurface = normalizeForConsistency(surface);
-            String hNorm = normalizeForConsistency(normalizedForm);
+            String hSurface = DictUtil.normalizeForConsistency(surface);
+            String hNorm = DictUtil.normalizeForConsistency(normalizedForm);
 
             if (hNorm.equals(hSurface)) return true;
 
@@ -164,18 +169,20 @@ public class SudachiDictConverter {
                 String nReading = hiragana.replace("は", "わ").replace("ひ", "い").replace("ふ", "う").replace("へ", "え").replace("ほ", "お");
                 if (nReading.endsWith(okuriNorm)) return false;
 
-                String kSurface = surface.replaceAll("[ぁ-ゖァ-ヺー〜～]+", "");
-                String kNorm = normalizedForm.replaceAll("[ぁ-ゖァ-ヺー〜～]+", "");
+                String kSurface = DictUtil.removeKana(surface);
+                String kNorm = DictUtil.removeKana(normalizedForm);
                 if (!kSurface.isEmpty() && kSurface.equals(kNorm)) return true;
             }
 
             String okuriSurface = extractOkurigana(surface);
             if (okuriNorm.isEmpty()) return okuriSurface.isEmpty();
 
-            // 送り仮名部分についても同様に正規化して比較
-            String s1 = normalizeForConsistency(okuriSurface);
-            String s2 = normalizeForConsistency(okuriNorm);
-            return s1.equals(s2);
+            // 送り仮名部分についても同様に正規化して比較。
+            // 許容されるのは「送り仮名の明記（例：悪だくみ）」であり、
+            // 「送り仮名の省略（例：押え）」は除外するため、endsWith で判定する。
+            String s1 = DictUtil.normalizeForConsistency(okuriSurface);
+            String s2 = DictUtil.normalizeForConsistency(okuriNorm);
+            return s1.endsWith(s2);
         }
 
         /**
@@ -289,16 +296,25 @@ public class SudachiDictConverter {
                         if (!entry.splitType.equals("A")) continue;
 
                         // 表記（surface）に半角スペースや句読点が含まれるものは除外する
-                        // （"." は略称などで使われるため、ここでは除外対象から外す）
-                        if (entry.surface.contains(" ") || entry.surface.contains("、") ||
-                                entry.surface.contains("。") || entry.surface.contains(",")) {
+                        if (!DictUtil.isValidSurface(entry.surface)) {
+                            continue;
+                        }
+
+                        // abbrev モード用の英単語は、読みと表記の不整合チェックをスキップして分類
+                        if (entry.isAbbrev()) {
+                            alphanumericEntries.add(entry);
+                            continue;
+                        }
+
+                        // 読みがひらがな（および長音）でないものは除外する
+                        if (!DictUtil.isValidReading(entry.hiragana)) {
                             continue;
                         }
 
                         // 表記に含まれる仮名や記号が、読みの中に正しい順序で現れるかチェックする
                         // （「北國」は仮名がないのでパス、「発しん」は「しん」が含まれるのでパス、
                         //   「ボー然」は「ぼー」が「ぼうぜん」に含まれないので除外）
-                        if (!isKanaConsistent(entry.surface, entry.hiragana)) {
+                        if (!DictUtil.isKanaConsistent(entry.surface, entry.hiragana)) {
                             continue;
                         }
 
@@ -443,11 +459,8 @@ public class SudachiDictConverter {
         }
 
         try (BufferedWriter writer = Files.newBufferedWriter(path, StandardCharsets.UTF_8)) {
-            writer.write(";; okuri-ari entries.\n");
             writeEntries(writer, okuriAri, true, false);
-            writer.write(";; okuri-nasi entries.\n");
             writeEntries(writer, okuriNasi, false, false);
-            writer.write(";; abbrev entries.\n");
             writeEntries(writer, abbrev, false, true);
         }
         System.out.println("Success. Output written to " + path.getFileName());
@@ -658,10 +671,13 @@ public class SudachiDictConverter {
                         candidateText = e.surface.substring(0, lastNonKana + 1);
                     }
                 } else if (isAbbrev) {
-                    // abbrev の場合、読み（カタカナ）を候補とする
-                    candidateText = e.reading;
-                    // 見出し語と同じ候補は除外する（例：daidalos /daidalos/）
-                    if (candidateText.equalsIgnoreCase(reading)) {
+                    // abbrev の場合、読み（カタカナ）または正規化表記を候補とする
+                    // 見出し語と同じ候補や日本語を含まない候補は除外する
+                    if (!e.reading.equalsIgnoreCase(reading) && DictUtil.containsJapanese(e.reading)) {
+                        candidateText = e.reading;
+                    } else if (!e.normalizedForm.equalsIgnoreCase(reading) && DictUtil.containsJapanese(e.normalizedForm)) {
+                        candidateText = e.normalizedForm;
+                    } else {
                         continue;
                     }
                 } else {
@@ -694,8 +710,10 @@ public class SudachiDictConverter {
                     }
                 }
             }
-            sb.append("\n");
-            writer.write(sb.toString());
+            if (!seen.isEmpty()) {
+                sb.append("\n");
+                writer.write(sb.toString());
+            }
         }
     }
 
@@ -713,57 +731,6 @@ public class SudachiDictConverter {
             return "(concat \"" + escaped + "\")";
         }
         return s;
-    }
-
-    /**
-     * 表記（surface）に含まれる仮名や記号が、読み（hiragana）と矛盾していないか確認します。
-     * 漢字を除いた「かな部分」を取り出し、それが読みの中に正しい順序で存在するかを判定します。
-     *
-     * @param surface  表記
-     * @param hiragana 読み（ひらがな）
-     * @return 矛盾がなければ true
-     */
-    private boolean isKanaConsistent(String surface, String hiragana) {
-        String nReading = normalizeForConsistency(hiragana);
-        int lastPos = 0;
-        StringBuilder currentSegment = new StringBuilder();
-
-        for (int i = 0; i < surface.length(); i++) {
-            char c = surface.charAt(i);
-            if (DictUtil.isKana(c)) {
-                currentSegment.append(c);
-            } else {
-                if (currentSegment.length() > 0) {
-                    String segment = normalizeForConsistency(currentSegment.toString());
-                    int foundPos = nReading.indexOf(segment, lastPos);
-                    if (foundPos == -1) return false;
-                    lastPos = foundPos + segment.length();
-                    currentSegment.setLength(0);
-                }
-            }
-        }
-        if (currentSegment.length() > 0) {
-            String segment = normalizeForConsistency(currentSegment.toString());
-            int foundPos = nReading.indexOf(segment, lastPos);
-            return foundPos != -1;
-        }
-        return true;
-    }
-
-    /**
-     * 比較のため、文字列を正規化（かな変換、旧仮名、小書き文字、波ダッシュ、ヶ/ケ/か、歴史的仮名遣いの統一）します。
-     *
-     * @param s 対象文字列
-     * @return 正規化後の文字列
-     */
-    private static String normalizeForConsistency(String s) {
-        if (s == null) return "";
-        return DictUtil.toHiragana(s)
-                .replace("ゐ", "い").replace("ゑ", "え").replace("を", "お")
-                .replace("っ", "つ").replace("ゃ", "や").replace("ゅ", "ゆ").replace("ょ", "よ")
-                .replace("〜", "ー").replace("～", "ー")
-                .replace("ゖ", "か").replace("け", "か").replace("が", "か").replace("げ", "か")
-                .replace("ぢ", "じ").replace("づ", "ず");
     }
 
     /**
@@ -792,13 +759,7 @@ public class SudachiDictConverter {
                 case "サ変可能" -> verbalNounEntries.add(entry);
                 case "副詞可能" -> adverbialNounEntries.add(entry);
                 case "助数詞可能" -> counterEntries.add(entry);
-                default -> {
-                    if (entry.surface.matches("^[a-zA-Z0-9]+$")) {
-                        alphanumericEntries.add(entry);
-                    } else {
-                        nounEntries.add(entry);
-                    }
-                }
+                default -> nounEntries.add(entry);
             }
         } else {
             nounEntries.add(entry);
@@ -816,17 +777,23 @@ public class SudachiDictConverter {
         System.out.println("Generating TSV: " + path.toAbsolutePath());
         // 読み、正規化表記、活用型、表層形の順でソート
         entries.sort(Comparator
-                .comparing((SudachiEntry e) -> e.hiragana)
-                .thenComparing(e -> e.normalizedForm)
+                .comparing((SudachiEntry e) -> e.normalizedForm)
+                .thenComparing(e -> e.hiragana)
+                .thenComparing(e -> e.surface)
                 .thenComparing(e -> e.type)
                 .thenComparing(e -> e.form)
-                .thenComparing(e -> e.surface)
         );
 
         try (BufferedWriter writer = Files.newBufferedWriter(path, StandardCharsets.UTF_8)) {
             for (SudachiEntry entry : entries) {
                 String pos = String.join(",", entry.pos1, entry.pos2, entry.pos3, entry.pos4, entry.type, entry.form);
-                String tsv = String.join("\t", entry.hiragana, entry.surface, entry.normalizedForm, "" + entry.cost, pos);
+                String tsv = String.join("\t",
+                        entry.normalizedForm,
+                        entry.hiragana,
+                        entry.surface,
+                        pos,
+                        "" + entry.cost
+                );
                 writer.write(tsv + "\n");
             }
         }

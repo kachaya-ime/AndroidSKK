@@ -130,8 +130,26 @@ public class DictUtil {
      */
     public static boolean isHiraganaOnly(String s) {
         if (s == null) return false;
+        if (s.length() == 0) return false;
         for (char c : s.toCharArray()) {
             if (!isHiragana(c)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * 文字列がカタカナのみで構成されているか判定します。
+     *
+     * @param s 判定対象の文字列
+     * @return カタカナのみであれば true
+     */
+    public static boolean isKatakanaOnly(String s) {
+        if (s == null) return false;
+        if (s.length() == 0) return false;
+        for (char c : s.toCharArray()) {
+            if (!isKatakana(c)) {
                 return false;
             }
         }
@@ -212,6 +230,95 @@ public class DictUtil {
             }
         }
         return true;
+    }
+
+    /**
+     * 表記（surface）として適切な文字列かどうかを判定します。
+     * スペースや句読点が含まれている場合は不適切とみなします。
+     * ただし、略称などで使われるドット "." は許容します。
+     *
+     * @param s 判定対象の文字列
+     * @return 適切であれば true
+     */
+    public static boolean isValidSurface(String s) {
+        if (s == null) return false;
+        return !s.contains(" ") && !s.contains("　") && !s.contains("、") &&
+                !s.contains("。") && !s.contains(",");
+    }
+
+    /**
+     * 表記（surface）に含まれる仮名や記号が、読み（hiragana）と矛盾していないか確認します。
+     * 漢字を除いた「かな部分」を取り出し、それが読みの中に正しい順序で存在するかを判定します。
+     *
+     * @param surface  表記
+     * @param hiragana 読み（ひらがな）
+     * @return 矛盾がなければ true
+     */
+    public static boolean isKanaConsistent(String surface, String hiragana) {
+        String nReading = normalizeForConsistency(hiragana);
+        int lastPos = 0;
+        StringBuilder currentSegment = new StringBuilder();
+
+        for (int i = 0; i < surface.length(); i++) {
+            char c = surface.charAt(i);
+            if (DictUtil.isKana(c)) {
+                currentSegment.append(c);
+            } else {
+                if (currentSegment.length() > 0) {
+                    String segment = normalizeForConsistency(currentSegment.toString());
+                    int foundPos = nReading.indexOf(segment, lastPos);
+                    if (foundPos == -1) return false;
+                    lastPos = foundPos + segment.length();
+                    currentSegment.setLength(0);
+                }
+            }
+        }
+        if (currentSegment.length() > 0) {
+            String segment = normalizeForConsistency(currentSegment.toString());
+            int foundPos = nReading.indexOf(segment, lastPos);
+            return foundPos != -1;
+        }
+        return true;
+    }
+
+    /**
+     * 比較のため、文字列を正規化（かな変換、旧仮名、小書き文字、波ダッシュ、ヶ/ケ/か、歴史的仮名遣いの統一）します。
+     *
+     * @param s 対象文字列
+     * @return 正規化後の文字列
+     */
+    public static String normalizeForConsistency(String s) {
+        if (s == null) return "";
+        return toHiragana(s)
+                .replace("ゐ", "い").replace("ゑ", "え").replace("を", "お")
+                .replace("っ", "つ").replace("ゃ", "や").replace("ゅ", "ゆ").replace("ょ", "よ")
+                .replace("〜", "ー").replace("～", "ー")
+                .replace("ゖ", "か").replace("け", "か").replace("が", "か").replace("げ", "か")
+                .replace("ぢ", "じ").replace("づ", "ず");
+    }
+
+    /**
+     * 文字列からかな（ひらがな、カタカナ、長音、波ダッシュ）を除去します。
+     *
+     * @param s 除去対象の文字列
+     * @return かなを除去した後の文字列
+     */
+    public static String removeKana(String s) {
+        if (s == null) return null;
+        return s.replaceAll("[ぁ-ゖァ-ヺー〜～]+", "");
+    }
+
+    /**
+     * 文字列が英単語（abbrevモード用）として適切かどうかを判定します。
+     * 先頭と末尾は英数字で、途中にはドット、アンダースコア、ハイフン、アポストロフィ、スペースを許容します。
+     *
+     * @param s 判定対象の文字列
+     * @return 英単語として適切であれば true
+     */
+    public static boolean isEnglishWord(String s) {
+        if (s == null) return false;
+        // 英数字に加え、人名や専門用語で使われる記号（' . - _）を許容する
+        return s.matches("^[a-zA-Z0-9][a-zA-Z0-9._' -]*$");
     }
 
     /**
