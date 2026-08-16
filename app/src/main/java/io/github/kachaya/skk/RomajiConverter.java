@@ -461,8 +461,17 @@ public class RomajiConverter {
                     }
                 } else {
                     // ルール不適合部分を切り離して確定
-                    mEngine.commitRomajiText(node.getKey(), initialChar, false);
-                    mShiftSent = false;
+                    // ただし、ごく短い入力（ks, chs等）の場合は、バックスペースでの修正を許容するため
+                    // 即時確定させずに一旦バッファに留める。
+                    if (mComposing.length() <= 3) {
+                        break;
+                    }
+                    boolean commitUpper = false;
+                    if (mShiftSent) {
+                        commitUpper = true;
+                        mShiftSent = false;
+                    }
+                    mEngine.commitRomajiText(node.getKey(), initialChar, commitUpper);
                     mComposing.delete(0, node.getKey().length());
                 }
             }
