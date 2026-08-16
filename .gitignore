@@ -31,3 +31,4 @@ google-services.json
 /work/
 /data/*
 !/data/prepare.bat
+/.artifacts/

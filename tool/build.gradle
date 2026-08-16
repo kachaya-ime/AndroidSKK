@@ -21,6 +21,14 @@ jar {
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
 }
 
+tasks.withType(JavaCompile) {
+    options.encoding = 'UTF-8'
+}
+
+tasks.withType(JavaExec) {
+    jvmArgs "-Dfile.encoding=UTF-8"
+}
+
 tasks.register('runSudachiDictConverter', JavaExec) {
     group = 'application'
     description = 'Runs the SudachiDictConverter tool'
