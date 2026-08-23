@@ -3,6 +3,8 @@ package io.github.kachaya.skk;
 import android.content.SharedPreferences;
 import android.net.Uri;
 import android.os.Bundle;
+import android.text.Html;
+import android.text.Spanned;
 import android.widget.Toast;
 
 import androidx.activity.result.ActivityResultLauncher;
@@ -10,20 +12,26 @@ import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.appcompat.app.ActionBar;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.preference.ListPreference;
 import androidx.preference.Preference;
 import androidx.preference.PreferenceFragmentCompat;
 import androidx.preference.PreferenceManager;
+import androidx.preference.SwitchPreference;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.io.BufferedReader;
+import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
 import java.util.TreeMap;
+
+import io.github.kachaya.skk.keyboard.KeyConfig;
+import io.github.kachaya.skk.keyboard.LayoutManager;
 
 /**
  * SKK の動作設定やカスタマイズを行うための設定画面アクティビティです。
@@ -84,6 +92,35 @@ public class SettingsActivity extends AppCompatActivity {
             InputService.setupDefaultPreferences(getContext());
 
             setPreferencesFromResource(R.xml.root_preferences, rootKey);
+
+            Preference legalInfoPref = findPreference("legal_info");
+            if (legalInfoPref != null) {
+                legalInfoPref.setOnPreferenceClickListener(preference -> {
+                    // 親アクティビティのメソッドを直接呼び出す
+                    if (getActivity() instanceof SettingsActivity) {
+                        ((SettingsActivity) getActivity()).showLegalInfoDialog();
+                    }
+                    return true;
+                });
+            }
+
+            ListPreference keyboardTypePref = findPreference("keyboard_type");
+            SwitchPreference inputSingleLinePref = findPreference("input_single_line");
+            if (keyboardTypePref != null && inputSingleLinePref != null) {
+                // 初期状態の反映
+                String currentType = keyboardTypePref.getValue();
+                inputSingleLinePref.setEnabled("symbols".equals(currentType));
+
+                keyboardTypePref.setOnPreferenceChangeListener((preference, newValue) -> {
+                    String newType = (String) newValue;
+                    boolean isSymbols = "symbols".equals(newType);
+                    inputSingleLinePref.setEnabled(isSymbols);
+                    if (!isSymbols) {
+                        inputSingleLinePref.setChecked(false);
+                    }
+                    return true;
+                });
+            }
 
             // アプリバージョンのサマリーに現在のビルド情報を動的に反映
             Preference versionPref = findPreference("app_version");
@@ -234,6 +271,58 @@ public class SettingsActivity extends AppCompatActivity {
             } catch (Exception e) {
                 Toast.makeText(getContext(), "復元に失敗しました: " + e.getMessage(), Toast.LENGTH_LONG).show();
             }
+        }
+    }
+
+    /**
+     * assets/legal_info.txt から法的情報を読み込んでダイアログ表示します。
+     * フラグメント側を汚さないよう、アクティビティ側のメソッドとして分離しています。
+     */
+    private void showLegalInfoDialog() {
+        StringBuilder markdownBuilder = new StringBuilder();
+
+        // try-with-resources による安全な自動クローズ
+        try (InputStream inputStream = getAssets().open("legal_info.txt");
+             InputStreamReader streamReader = new InputStreamReader(inputStream, StandardCharsets.UTF_8);
+             BufferedReader reader = new BufferedReader(streamReader)) {
+
+            String line;
+            while ((line = reader.readLine()) != null) {
+                markdownBuilder.append(line).append("\n");
+            }
+
+            // 2. 簡易マークダウン ➡️ HTML 置換処理
+            String htmlText = markdownBuilder.toString();
+
+            // バックォート3つ（```）で囲まれたコードブロックの置換処理
+            htmlText = htmlText.replaceAll("(?s)```(.*?)```", "<br><tt>$1</tt><br>");
+
+            // 見出しの置換 (### と ##)
+            htmlText = htmlText.replaceAll("(?m)^###\\s+(.+)$", "<br><b>◆ $1</b><br>");
+            htmlText = htmlText.replaceAll("(?m)^##\\s+(.+)$", "<br><b>■ $1</b><hr>");
+
+            // 太字の置換 (**text**)
+            htmlText = htmlText.replaceAll("\\*\\*(.*?)\\*\\*", "<b>$1</b>");
+
+            // 箇条書きの置換 (- 文字)
+            htmlText = htmlText.replaceAll("(?m)^-\\s+(.+)$", "・ $1<br>");
+
+            // 改行の保持（マークダウンの改行をHTMLの<br>に変換）
+            htmlText = htmlText.replaceAll("\n", "<br>");
+
+            // 3. HTML文字列をAndroidのリッチテキスト(Spanned)に変換
+            Spanned spannedText;
+            spannedText = Html.fromHtml(htmlText, Html.FROM_HTML_MODE_LEGACY);
+
+            // 4. ダイアログにセットして表示
+            new AlertDialog.Builder(this)
+                    .setTitle("法的情報・ライセンス")
+                    .setMessage(spannedText)
+                    .setPositiveButton("閉じる", null)
+                    .show();
+        } catch (IOException e) {
+            Toast.makeText(this, "ファイルの読み込みに失敗しました", Toast.LENGTH_SHORT).show();
+            e.printStackTrace();
         }
     }
 }

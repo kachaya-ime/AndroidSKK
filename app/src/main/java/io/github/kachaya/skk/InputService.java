@@ -4,6 +4,7 @@ import android.annotation.SuppressLint;
 import android.content.SharedPreferences;
 import android.graphics.Matrix;
 import android.graphics.RectF;
+import android.graphics.drawable.ColorDrawable;
 import android.inputmethodservice.InputMethodService;
 import android.os.Handler;
 import android.os.Looper;
@@ -15,16 +16,21 @@ import android.view.KeyEvent;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
-import android.view.WindowManager;
 import android.view.inputmethod.CursorAnchorInfo;
 import android.view.inputmethod.EditorInfo;
 import android.view.inputmethod.InputConnection;
 import android.widget.PopupWindow;
 import android.widget.TextView;
+import android.widget.ViewFlipper;
 
 import androidx.preference.PreferenceManager;
 
 import java.util.List;
+
+import io.github.kachaya.skk.engine.Candidate;
+import io.github.kachaya.skk.engine.Dictionary;
+import io.github.kachaya.skk.engine.SKKEngine;
+import io.github.kachaya.skk.engine.SKKIcon;
 
 /**
  * SKK 入力メソッドのメインサービス実装です。
@@ -57,6 +63,8 @@ public class InputService extends InputMethodService implements SharedPreference
     private boolean mSandS = false;
     /** モード切替時にカーソル付近にツールチップを表示する時間（ミリ秒）。0 の場合は非表示。 */
     private int mTooltipDuration = 1000;
+    /** ツールチップ表示位置（"top" または "bottom"）。 */
+    private String mTooltipPosition = "top";
 
     /** 現在のエディタが TYPE_NULL（入力を受け付けない）かどうか。 */
     private boolean mIsInputTypeNull = false;
@@ -88,12 +96,16 @@ public class InputService extends InputMethodService implements SharedPreference
     private boolean mNeedsTooltipUpdate = false;
     /** ツールチップ表示用のポップアップ。 */
     private PopupWindow mTooltipPopup;
+    /** ストローク入力ヘルプ表示用のポップアップ。 */
+    private PopupWindow mHelpPopup;
     /** ツールチップを閉じる実行タスク。 */
     private final Runnable mHideRunnable = () -> {
         if (mTooltipPopup != null) {
             mTooltipPopup.dismiss();
         }
     };
+    /** ウィンドウ表示時のツールチップ表示遅延用タスク。 */
+    private final Runnable mShowTooltipRunnable = this::requestUIUpdate;
 
     /**
      * デバッグビルド時のみログを出力する内部ユーティリティです。
@@ -289,6 +301,9 @@ public class InputService extends InputMethodService implements SharedPreference
     @Override
     public void onFinishInputView(boolean finishingInput) {
         logI("onFinishInputView: finishingInput=" + finishingInput);
+        // 入力ビューが閉じる際（アニメーション開始前）にステータスUIを隠し、
+        // 予約済みの表示リクエストもキャンセルすることで、ツールチップがキーボードと一緒に流れるのを防ぎます。
+        dismissStatusUI();
         super.onFinishInputView(finishingInput);
     }
 
@@ -331,8 +346,9 @@ public class InputService extends InputMethodService implements SharedPreference
             ic.requestCursorUpdates(InputConnection.CURSOR_UPDATE_IMMEDIATE | InputConnection.CURSOR_UPDATE_MONITOR);
         }
 
-        // ウィンドウが表示されたタイミングでUI状態を最新にする
-        requestUIUpdate();
+        // ウィンドウが表示された直後はアニメーション中の可能性があるため、
+        // アニメーション完了を見越して遅延させてから UI 更新を行うことでツールチップの「流れ」を抑制します。
+        mHideHandler.postDelayed(mShowTooltipRunnable, 1000);
     }
 
     /**
@@ -352,6 +368,13 @@ public class InputService extends InputMethodService implements SharedPreference
     /**
      * エディタ内での選択範囲やカーソル位置が更新された際に呼び出されます。
      */
+    /**
+     * カーソル位置やテキストの選択状態が変更された際に呼び出されます。
+     * <p>
+     * SKK では通常、{@link #onUpdateCursorAnchorInfo(CursorAnchorInfo)} で詳細な座標情報を取得するため、
+     * このメソッドでは特別なリセット処理は行わず、キャレットの移動に追従した UI 更新の準備のみを行います。
+     * </p>
+     */
     @Override
     public void onUpdateSelection(int oldSelStart, int oldSelEnd, int newSelStart, int newSelEnd, int candidatesStart, int candidatesEnd) {
         super.onUpdateSelection(oldSelStart, oldSelEnd, newSelStart, newSelEnd, candidatesStart, candidatesEnd);
@@ -360,10 +383,13 @@ public class InputService extends InputMethodService implements SharedPreference
     }
 
     /**
-     * エディタからカーソルやテキストの矩形情報が通知された際に呼び出されます。
-     * ステータス表示をキャレット位置に追従させるための座標計算を行います。
+     * エディタからカーソルやテキストの矩形情報（CursorAnchorInfo）が通知された際に呼び出されます。
+     * <p>
+     * ステータス表示アイコンやツールチップをキャレット位置に正確に追従させるための座標計算を行います。
+     * カーソルが不可視状態（画面外など）になった場合は、エンジンの状態をリセットし UI を非表示にします。
+     * </p>
      *
-     * @param cursorAnchorInfo 通知された情報
+     * @param cursorAnchorInfo エディタから渡される座標およびテキスト構造の情報
      */
     @Override
     public void onUpdateCursorAnchorInfo(CursorAnchorInfo cursorAnchorInfo) {
@@ -408,11 +434,6 @@ public class InputService extends InputMethodService implements SharedPreference
         // 視認性が変わった場合はアイコンを更新
         if (wasInvisible != mIsCursorInvisible) {
             updateStatusIcon();
-            if (mIsCursorInvisible) {
-                // カーソルが消えた場合は、不整合を防ぐためエンジンの未確定状態をリセットする
-                mEngine.reset();
-                setComposingText("", 1);
-            }
         }
 
         // すでに表示中のツールチップがあれば位置を合わせる
@@ -424,6 +445,7 @@ public class InputService extends InputMethodService implements SharedPreference
 
     /**
      * カーソルに関連する座標情報を初期状態に戻します。
+     * 新しい入力セッションの開始時や、カーソル位置が不明になった際に呼び出されます。
      */
     private void resetCursorState() {
         mCursorHorizontal = 0;
@@ -435,7 +457,11 @@ public class InputService extends InputMethodService implements SharedPreference
 
     /**
      * 表示中のツールチップの位置を最新のカーソル座標に合わせて更新します。
-     * スクリーン絶対座標を IME ウィンドウのベース座標を考慮して変換適用します。
+     * <p>
+     * エディタから取得したスクリーン絶対座標を IME ウィンドウの左上角を基準とした相対座標に変換して適用します。
+     * これにより、キーボード（IME ウィンドウ）の表示範囲外であっても、キャレット（入力位置）の直下に正確に配置されます。
+     * カーソルが不可視になった場合はツールチップを非表示にします。
+     * </p>
      */
     private void updateTooltipPosition() {
         if (mTooltipPopup == null || !mTooltipPopup.isShowing()) {
@@ -447,65 +473,79 @@ public class InputService extends InputMethodService implements SharedPreference
             return;
         }
 
-        int[] coords = calculateTooltipCoordinates(mTooltipPopup.getContentView());
-        try {
-            mTooltipPopup.update(coords[0], coords[1], -1, -1);
-        } catch (Exception ignored) {
-        }
+        int[] coords = calculateTooltipScreenCoordinates(mTooltipPopup.getContentView());
+        showPopupAtScreenLocation(mTooltipPopup, coords[0], coords[1]);
     }
 
     /**
-     * ツールチップの表示位置（IME ウィンドウ相対座標）を計算します。
+     * ツールチップの表示位置（スクリーン絶対座標）を計算します。
+     * <p>
+     * 以下のロジックで Gboard 風の配置を実現します：
+     * 1. キャレット（入力カーソル）の下端のスクリーン座標を特定します。
+     * 2. キャレット位置を中心に水平方向を合わせ、下端から 2dp の余白を持たせたスクリーン座標を算出します。
+     * </p>
      *
      * @param contentView ツールチップのコンテンツビュー
-     * @return {x, y} 座標の配列
+     * @return {x, y} スクリーン絶対座標の配列
      */
-    private int[] calculateTooltipCoordinates(View contentView) {
+    private int[] calculateTooltipScreenCoordinates(View contentView) {
         contentView.measure(View.MeasureSpec.UNSPECIFIED, View.MeasureSpec.UNSPECIFIED);
+        float density = getResources().getDisplayMetrics().density;
         int popupWidth = contentView.getMeasuredWidth();
         int popupHeight = contentView.getMeasuredHeight();
-        float density = getResources().getDisplayMetrics().density;
-        float caretHeight = mCursorBottom - mCursorTop;
 
-        // キャレットの高さが取得できている場合はそれを基準にオフセットを計算
-        int offsetDp = 30;
-        if (caretHeight > 0) {
-            // 行の高さの半分 + 15dp 程度を浮かせる（機種やフォントサイズへの適応）
-            offsetDp = (int) (caretHeight / density / 2) + 15;
-            if (offsetDp < 30) {
-                offsetDp = 30;
+        // 目標とするスクリーン絶対座標
+        int targetX = (int) mCursorHorizontal - (popupWidth / 2);
+        int targetY;
+
+        if ("top".equals(mTooltipPosition)) {
+            // 1. キャレットのスクリーン座標（上端）を取得
+            float caretTop = Math.min(mCursorTop, mCursorBottom);
+            // 2. 目標とするスクリーン絶対座標 (キャレットの 2dp 上)
+            targetY = (int) caretTop - popupHeight - (int) (2 * density);
+        } else {
+            // 1. キャレットのスクリーン座標（下端）を取得
+            float caretBottom = Math.max(mCursorTop, mCursorBottom);
+            // 2. 目標とするスクリーン絶対座標 (キャレットの 2dp 下)
+            targetY = (int) caretBottom + (int) (2 * density);
+        }
+
+        return new int[]{targetX, targetY};
+    }
+
+    /**
+     * PopupWindow を指定されたスクリーン絶対座標に表示、または更新します。
+     * <p>
+     * IME ウィンドウ（InputView）の左上角からの相対座標に内部で変換することで、
+     * {@link PopupWindow#setClippingEnabled(boolean)} が false の場合にウィンドウ外への描画を可能にします。
+     * </p>
+     *
+     * @param popup 表示・更新する PopupWindow
+     * @param screenX 表示したい場所のスクリーン X 座標
+     * @param screenY 表示したい場所のスクリーン Y 座標
+     */
+    private void showPopupAtScreenLocation(PopupWindow popup, int screenX, int screenY) {
+        if (mInputView == null) return;
+        View anchor = mInputView.getRootView();
+
+        int[] loc = new int[2];
+        anchor.getLocationOnScreen(loc);
+
+        // ウィンドウ相対座標への変換
+        int x = screenX - loc[0];
+        int y = screenY - loc[1];
+
+        try {
+            if (popup.isShowing()) {
+                popup.update(x, y, -1, -1);
+            } else {
+                // 表示前に共通の設定を適用
+                popup.setClippingEnabled(false);
+                popup.showAtLocation(anchor, Gravity.NO_GRAVITY, x, y);
             }
+        } catch (Exception e) {
+            logI("Failed to show/update popup: " + e.getMessage());
         }
-
-        // スクリーン座標を IME ウィンドウの相対座標に変換するための基準取得
-        int[] locScreen = new int[2];
-        int[] locWindow = new int[2];
-        View anchor = (mInputView != null) ? mInputView.getRootView() : null;
-        if (anchor != null) {
-            anchor.getLocationOnScreen(locScreen);
-            anchor.getLocationInWindow(locWindow);
-        }
-
-        // ウィンドウ自体のスクリーン上での開始位置を正確に算出
-        int winX = locScreen[0] - locWindow[0];
-        int winY = locScreen[1] - locWindow[1];
-
-        // 水平位置：キャレットの真上付近に中央寄せすることで、右上の重なりを避ける
-        float anchorX = (mComposingHorizontal != -1) ? mComposingHorizontal : mCursorHorizontal;
-        int x = (int) anchorX - (popupWidth / 2);
-        int y = (int) mCursorTop - popupHeight - (int) (offsetDp * density);
-
-        // オフセット補正
-        int finalX = x - winX;
-        int finalY = y - winY;
-
-        // 補正結果が異常な場合（Titan 等の特定デバイス）は補正を無効化
-        if (finalY < -100) {
-            finalX = x;
-            finalY = y;
-        }
-
-        return new int[]{finalX, finalY};
     }
 
     /**
@@ -527,8 +567,7 @@ public class InputService extends InputMethodService implements SharedPreference
      * @return 無効な場合は true
      */
     private boolean isInputDisabled() {
-        // カーソルが表示されていない場合も、物理キー入力をシステムに流し、IME UI を隠すために disabled と見なす
-        return mIsInputTypeNull || getCurrentInputConnection() == null || mIsCursorInvisible;
+        return mIsInputTypeNull || getCurrentInputConnection() == null;
     }
 
     /**
@@ -540,6 +579,7 @@ public class InputService extends InputMethodService implements SharedPreference
         mSandS = prefs.getBoolean("s_and_s", false);
         // 設定画面（秒）の値を内部用のミリ秒に変換
         mTooltipDuration = prefs.getInt("tooltip_duration_sec", 1) * 1000;
+        mTooltipPosition = prefs.getString("tooltip_position", "top");
         mAutoAsciiMode = prefs.getBoolean("auto_ascii_mode", false);
 
         // エンジン側の設定を更新
@@ -875,7 +915,11 @@ public class InputService extends InputMethodService implements SharedPreference
     }
 
     /**
-     * 再変換の準備として、カーソル直前の指定文字列を削除します。
+     * 再変換の準備として、カーソル直前の指定文字列をエディタから削除します。
+     * <p>
+     * エディタ側のテキストが指定された文字列と一致する場合のみ削除を実行し、
+     * 変換エンジン側で再変換セッションを開始できる状態にします。
+     * </p>
      *
      * @param candidate 再変換対象の文字列
      * @return 削除に成功した場合は true
@@ -890,10 +934,10 @@ public class InputService extends InputMethodService implements SharedPreference
     }
 
     /**
-     * 未確定文字列をエディタに設定します。
+     * エディタに対して未確定文字列（Composing Text）を設定します。
      *
-     * @param text              未確定文字列
-     * @param newCursorPosition 新しいカーソル位置
+     * @param text              設定する未確定文字列
+     * @param newCursorPosition 文字列内での新しいカーソル相対位置
      */
     public void setComposingText(CharSequence text, int newCursorPosition) {
         InputConnection ic = getCurrentInputConnection();
@@ -910,7 +954,10 @@ public class InputService extends InputMethodService implements SharedPreference
 
     /**
      * ステータス UI（アイコンおよびツールチップ）の更新リクエストを登録します。
-     * 座標が必要なツールチップ等は座標確定後に更新します。
+     * <p>
+     * 座標が必要なツールチップ等は、{@link #onUpdateCursorAnchorInfo(CursorAnchorInfo)} により
+     * 座標が確定したタイミングで表示されます。
+     * </p>
      */
     public void requestUIUpdate() {
         // ステータスアイコンは座標に依存しないため、即座に更新する
@@ -926,15 +973,40 @@ public class InputService extends InputMethodService implements SharedPreference
      */
     private void updateStatusIcon() {
         if (isInputDisabled()) {
-            // カーソル不可視等の場合はアイコンを表示しない
+            // 入力不可または接続がない場合はアイコンを表示しない
             hideStatusIcon();
             return;
         }
-        int iconRes = mEngine.getCurrentIcon();
+        SKKIcon icon = mEngine.getCurrentIcon();
+        int iconRes = getIconResourceId(icon);
         if (iconRes != 0) {
             showStatusIcon(iconRes);
         } else {
             hideStatusIcon();
+        }
+    }
+
+    /**
+     * 指定された SKKIcon に対応する Android リソース ID を取得します。
+     *
+     * @param icon アイコンの種類
+     * @return リソース ID、または 0
+     */
+    private int getIconResourceId(SKKIcon icon) {
+        if (icon == null) return 0;
+        switch (icon) {
+            case FULL_HIRAGANA:
+                return R.drawable.ic_mode_full_hiragana;
+            case FULL_KATAKANA:
+                return R.drawable.ic_mode_full_katakana;
+            case FULL_LATIN:
+                return R.drawable.ic_mode_full_latin;
+            case HALF_KATAKANA:
+                return R.drawable.ic_mode_half_katakana;
+            case ABBREV:
+                return R.drawable.ic_mode_abbrev;
+            default:
+                return 0;
         }
     }
 
@@ -945,8 +1017,12 @@ public class InputService extends InputMethodService implements SharedPreference
         mNeedsTooltipUpdate = false;
         hideStatusIcon();
         mHideHandler.removeCallbacks(mHideRunnable);
+        mHideHandler.removeCallbacks(mShowTooltipRunnable);
         if (mTooltipPopup != null) {
             mTooltipPopup.dismiss();
+        }
+        if (mHelpPopup != null) {
+            mHelpPopup.dismiss();
         }
     }
 
@@ -977,7 +1053,11 @@ public class InputService extends InputMethodService implements SharedPreference
 
     /**
      * 指定されたテキストでツールチップを即座に表示、または更新します。
-     * スクリーン絶対座標を IME ウィンドウのベース座標を考慮して変換適用します。
+     * <p>
+     * Gboard 等の標準的な IME の挙動に合わせ、キャレットの直下付近に表示されるよう制御します。
+     * PopupWindow を IME ウィンドウ（InputView）に紐付けつつ、相対座標を指定することで
+     * システムによるウィンドウ外描画の制限を回避しています。
+     * </p>
      *
      * @param text 表示するテキスト
      */
@@ -996,25 +1076,74 @@ public class InputService extends InputMethodService implements SharedPreference
             tv.setText(text);
 
             mTooltipPopup = new PopupWindow(tv, ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-            mTooltipPopup.setClippingEnabled(false);
+            mTooltipPopup.setFocusable(false);
             mTooltipPopup.setAnimationStyle(0); // アニメーションを無効化
-            mTooltipPopup.setWindowLayoutType(WindowManager.LayoutParams.TYPE_APPLICATION_ATTACHED_DIALOG);
 
-            int[] coords = calculateTooltipCoordinates(tv);
-            int finalX = coords[0];
-            int finalY = coords[1];
+            int[] coords = calculateTooltipScreenCoordinates(tv);
+            showPopupAtScreenLocation(mTooltipPopup, coords[0], coords[1]);
 
-            logI(String.format("showTooltip: SCR(%.1f, %.1f), DST(%d, %d)",
-                    mCursorHorizontal, mCursorTop, finalX, finalY));
-
-            try {
-                // anchor をアンカーにして算出した相対座標で表示
-                View anchor = (mInputView != null) ? mInputView.getRootView() : null;
-                mTooltipPopup.showAtLocation(anchor, Gravity.NO_GRAVITY, finalX, finalY);
-            } catch (Exception e) {
-                logI("Failed to show tooltip: " + e.getMessage());
-            }
+            logI(String.format("showTooltip: SCR(%.1f, %.1f), TARGET(%d, %d)",
+                    mCursorHorizontal, mCursorTop, coords[0], coords[1]));
         }
         mHideHandler.postDelayed(mHideRunnable, mTooltipDuration);
     }
+
+    /**
+     * ストローク入力のヘルプをポップアップで表示します。
+     * <p>
+     * 内部で {@link android.widget.ViewFlipper} を使用しており、「前へ」「次へ」ボタンで
+     * 複数のヘルプページをループ表示します。
+     * </p>
+     * <p>
+     * 配置ロジック：
+     * 1. 画面全体の幅とコンテンツの計測高さを取得し、PopupWindow のサイズを確定させます。
+     * 2. アンカービュー（InputView のルート）のスクリーン位置を取得します。
+     * 3. キーボードの上端にピッタリ重なるスクリーン座標を算出し、それをアンカー基準の相対オフセットに変換します。
+     * 4. {@code setClippingEnabled(false)} により、IME ウィンドウの境界を超えた位置への表示を実現します。
+     * </p>
+     */
+    public void showStrokeHelp() {
+        if (mHelpPopup != null && mHelpPopup.isShowing()) {
+            return;
+        }
+
+        LayoutInflater inflater = LayoutInflater.from(this);
+        View helpView = inflater.inflate(R.layout.stroke_help, null);
+        int screenWidth = getResources().getDisplayMetrics().widthPixels;
+
+        // 表示前にサイズを計測して高さを確定させる
+        helpView.measure(View.MeasureSpec.makeMeasureSpec(screenWidth, View.MeasureSpec.EXACTLY),
+                View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
+        int helpHeight = helpView.getMeasuredHeight();
+
+        if (mInputView != null) {
+            View anchor = mInputView.getRootView();
+            int[] loc = new int[2];
+            anchor.getLocationOnScreen(loc);
+
+            // 幅を実数値で指定
+            mHelpPopup = new PopupWindow(helpView, screenWidth, ViewGroup.LayoutParams.WRAP_CONTENT);
+            mHelpPopup.setFocusable(true);
+            mHelpPopup.setOutsideTouchable(true);
+            mHelpPopup.setTouchable(true);
+            mHelpPopup.setBackgroundDrawable(new ColorDrawable(0));
+            mHelpPopup.setAnimationStyle(0);
+
+            ViewFlipper flipper = (ViewFlipper) helpView;
+            flipper.setOnClickListener(v -> flipper.showNext());
+
+            // スクリーン絶対座標 (キーボードの上端 - 算出された高さ)
+            int targetX = loc[0];
+            int targetY = loc[1] - helpHeight;
+
+            // 画面上端を超える場合は 0 に固定
+            if (targetY < 0) {
+                targetY = 0;
+            }
+
+            logI(String.format("showStrokeHelp: SCR_Y=%d, H=%d", targetY, helpHeight));
+            showPopupAtScreenLocation(mHelpPopup, targetX, targetY);
+        }
+    }
+
 }

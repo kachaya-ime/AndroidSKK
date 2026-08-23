@@ -1,25 +1,21 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- Base Colors -->
-    <color name="black">#FF000000</color>
-    <color name="white">#FFFFFFFF</color>
 
     <!-- Material 3 Neutral Variant Palette (ベースのグレー系統) -->
     <!-- 全体を滑らかなグラデーション（Blue-Grey系統）に調整 -->
     <color name="neutral_variant_10">#191C1E</color> <!-- キーボード背景 -->
-    <color name="neutral_variant_15">#232629</color> <!-- 基本の機能ボタン背景 -->
+    <!-- 基本の機能ボタン背景 -->
     <color name="neutral_variant_20">#2E3133</color> <!-- 文字ボタン背景 -->
     <color name="neutral_variant_30">#44474E</color> <!-- 選択状態 -->
     <color name="neutral_variant_40">#5B5F66</color> <!-- 押下状態 -->
-    <color name="neutral_variant_50">#74777F</color>
-    <color name="neutral_variant_60">#8E9199</color> <!-- ユーザー辞書用: 青みがかった落ち着いたグレー -->
+    <!-- ユーザー辞書用: 青みがかった落ち着いたグレー -->
     <color name="neutral_variant_70">#A8ABB3</color>
-    <color name="neutral_variant_80">#C4C6CF</color>
     <color name="neutral_variant_90">#E1E2E9</color> <!-- 文字色 -->
 
     <!-- Functional Accent Palette (機能ボタン用の色相: Subtle Blue) -->
     <color name="function_bg_tint">#202932</color>   <!-- 青みがかった暗色背景 -->
-    <color name="function_fg_tint">#A6C8FF</color>   <!-- 落ち着いた青色のアイコン/文字 -->
+    <!-- 落ち着いた青色のアイコン/文字 -->
 
     <!-- Composing Colors (入力・変換中のハイライト) -->
     <color name="composing_composing">#33A6C8FF</color>  <!-- ▽ 見出し語入力: 20% Blue Accent -->
@@ -52,7 +48,6 @@
     <color name="function_button_bg_selected">@color/button_bg_selected</color>
 
     <color name="character_button_bg_pressed">@color/button_bg_pressed</color>
-    <color name="character_button_bg_selected">@color/button_bg_selected</color>
 
     <color name="candidate_button_bg_pressed">@color/button_bg_pressed</color>
     <color name="candidate_button_bg_selected">@color/button_bg_selected</color>

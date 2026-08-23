@@ -3,9 +3,35 @@
     <string-array name="keyboard_types">
         <item>記号バー</item>
         <item>QWERTY</item>
+        <item>ストローク</item>
     </string-array>
     <string-array name="keyboard_type_values">
         <item>symbols</item>
         <item>qwerty</item>
+        <item>stroke</item>
+    </string-array>
+
+    <string-array name="keyboard_heights">
+        <item>極小 (80%)</item>
+        <item>小さめ (90%)</item>
+        <item>標準 (100%)</item>
+        <item>大きめ (110%)</item>
+        <item>極大 (120%)</item>
+    </string-array>
+    <string-array name="keyboard_height_values">
+        <item>0.8</item>
+        <item>0.9</item>
+        <item>1.0</item>
+        <item>1.1</item>
+        <item>1.2</item>
+    </string-array>
+
+    <string-array name="tooltip_positions">
+        <item>上</item>
+        <item>下</item>
+    </string-array>
+    <string-array name="tooltip_position_values">
+        <item>top</item>
+        <item>bottom</item>
     </string-array>
 </resources>

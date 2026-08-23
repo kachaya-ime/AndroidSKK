@@ -1,0 +1,7 @@
+[
+  [{"label":"1"},{"label":"2"},{"label":"3"},{"label":"4"},{"label":"5"},{"label":"6"},{"label":"7"},{"label":"8"},{"label":"9"},{"label":"0"}],
+  [{"label":"Q"},{"label":"W"},{"label":"E"},{"label":"R"},{"label":"T"},{"label":"Y"},{"label":"U"},{"label":"I"},{"label":"O"},{"label":"P"}],
+  [{"label":"A"},{"label":"S"},{"label":"D"},{"label":"F"},{"label":"G"},{"label":"H"},{"label":"J"},{"label":"K"},{"label":"L"},{"label":"/"}],
+  [{"label":"⇧","code":"SHIFT","weight":1.5},{"label":"Z"},{"label":"X"},{"label":"C"},{"label":"V"},{"label":"B"},{"label":"N"},{"label":"M"},{"label":"⌫","code":"BACKSPACE","weight":1.5}],
+  [{"label":"Ctrl","code":"CTRL","weight":1.5},{"label":"Sym","code":"SYM"},{"label":"<"},{"label":"⌴","code":"SPACE","weight":2.0},{"label":">"},{"label":"◂","code":"LEFT"},{"label":"▸","code":"RIGHT"},{"label":"⏎","code":"ENTER","weight":1.5}]
+]

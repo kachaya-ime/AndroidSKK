@@ -25,7 +25,7 @@
             </intent-filter>
         </activity>
         <activity
-            android:name=".KeyboardCustomizerActivity"
+            android:name=".keyboard.KeyboardCustomizerActivity"
             android:exported="false"
             android:label="キー配列のカスタマイズ">
         </activity>

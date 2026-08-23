@@ -30,6 +30,8 @@ import java.io.OutputStreamWriter;
 import java.util.ArrayList;
 import java.util.List;
 
+import io.github.kachaya.skk.engine.Dictionary;
+
 /**
  * ユーザー辞書の内容を管理するための管理用アクティビティです。
  * <p>

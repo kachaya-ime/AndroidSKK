@@ -3,32 +3,35 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:orientation="vertical"
-    android:fitsSystemWindows="true">
+    android:fitsSystemWindows="true"
+    android:orientation="vertical">
 
     <RadioGroup
         android:id="@+id/mode_selector"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="horizontal"
         android:gravity="center"
+        android:orientation="horizontal"
         android:padding="4dp">
+
         <RadioButton
             android:id="@+id/radio_normal"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="通常"
-            android:checked="true"/>
+            android:checked="true"
+            android:text="通常" />
+
         <RadioButton
             android:id="@+id/radio_shift"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Shift"/>
+            android:text="Shift" />
+
         <RadioButton
             android:id="@+id/radio_symbol"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="記号"/>
+            android:text="記号" />
     </RadioGroup>
 
     <ScrollView
@@ -40,15 +43,15 @@
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:background="#191C1E">
+            android:background="#191C1E"
+            android:orientation="vertical">
 
             <LinearLayout
                 android:id="@+id/keyboard_preview_container"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:background="#121416">
+                android:background="#121416"
+                android:orientation="vertical">
                 <!-- 編集中のキーボードがここに表示される -->
             </LinearLayout>
 
@@ -67,36 +70,36 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:background="#191C1E"
-                app:tabTextColor="#666666"
-                app:tabSelectedTextColor="#FFFFFF"
                 app:tabIndicatorColor="#FFFFFF"
-                app:tabMode="fixed" />
+                app:tabMode="fixed"
+                app:tabSelectedTextColor="#FFFFFF"
+                app:tabTextColor="#666666" />
 
             <com.google.android.flexbox.FlexboxLayout
                 android:id="@+id/key_palette_special"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                app:flexWrap="wrap"
                 app:flexDirection="row"
+                app:flexWrap="wrap"
                 app:justifyContent="center" />
 
             <com.google.android.flexbox.FlexboxLayout
                 android:id="@+id/key_palette_alpha"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                app:flexWrap="wrap"
+                android:visibility="gone"
                 app:flexDirection="row"
-                app:justifyContent="center"
-                android:visibility="gone" />
+                app:flexWrap="wrap"
+                app:justifyContent="center" />
 
             <com.google.android.flexbox.FlexboxLayout
                 android:id="@+id/key_palette_other"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                app:flexWrap="wrap"
+                android:visibility="gone"
                 app:flexDirection="row"
-                app:justifyContent="center"
-                android:visibility="gone" />
+                app:flexWrap="wrap"
+                app:justifyContent="center" />
         </LinearLayout>
     </ScrollView>
 

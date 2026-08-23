@@ -60,6 +60,14 @@
         app:showSeekBarValue="true"
         app:updatesContinuously="true"
         />
+    <ListPreference
+        android:defaultValue="top"
+        android:entries="@array/tooltip_positions"
+        android:entryValues="@array/tooltip_position_values"
+        android:key="tooltip_position"
+        android:title="ツールチップ表示位置"
+        app:useSimpleSummaryProvider="true"
+        />
     <SwitchPreference
         android:defaultValue="true"
         android:key="input_single_line"
@@ -80,13 +88,21 @@
         android:title="キーボードの種類"
         app:useSimpleSummaryProvider="true"
         />
+    <ListPreference
+        android:defaultValue="1.0"
+        android:entries="@array/keyboard_heights"
+        android:entryValues="@array/keyboard_height_values"
+        android:key="keyboard_height_scale"
+        android:title="キーボードの高さ"
+        app:useSimpleSummaryProvider="true"
+        />
     <Preference
         android:key="keyboard_customizer_qwerty"
         android:summary="QWERTYキーボードのキー配列をカスタマイズします"
         android:title="QWERTYキー配列のカスタマイズ"
         >
         <intent
-            android:targetClass="io.github.kachaya.skk.KeyboardCustomizerActivity"
+            android:targetClass="io.github.kachaya.skk.keyboard.KeyboardCustomizerActivity"
             android:targetPackage="io.github.kachaya.skk"
             >
             <extra android:name="pref_key"
@@ -103,7 +119,7 @@
         android:title="記号バーのカスタマイズ"
         >
         <intent
-            android:targetClass="io.github.kachaya.skk.KeyboardCustomizerActivity"
+            android:targetClass="io.github.kachaya.skk.keyboard.KeyboardCustomizerActivity"
             android:targetPackage="io.github.kachaya.skk"
             >
             <extra android:name="pref_key"
@@ -177,5 +193,9 @@
         app:selectable="false"
         app:title="バージョン"
         />
-
+    <Preference
+        android:key="legal_info"
+        android:summary="オープンソースライセンス、商標免責、および免責事項"
+        android:title="法的情報・ライセンス"
+        />
 </PreferenceScreen>
