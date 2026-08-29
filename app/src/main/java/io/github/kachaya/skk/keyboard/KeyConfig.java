@@ -28,7 +28,7 @@ public class KeyConfig {
     public static final int CODE_UP = 10;
     public static final int CODE_DOWN = 11;
     public static final int CODE_GAP = 12;
-    public static final int CODE_MENU = 13;     // Graffitiのメニュー、左下→右上
+    public static final int CODE_ABC = 13;
     public static final int CODE_SHORTCUT = 14; // Graffitiのショートカット
     public static final int CODE_CANCEL = 15;   // Graffitiのキャンセル、右下→左上
     public static final int CODE_8_2_8 = 16;    // Graffitiでは未定義、左下→右上→左下
@@ -61,6 +61,8 @@ public class KeyConfig {
                 return "DOWN";
             case CODE_GAP:
                 return "GAP";
+            case CODE_ABC:
+                return "ABC";
             default:
                 return null;
         }
@@ -96,6 +98,8 @@ public class KeyConfig {
                 return CODE_DOWN;
             case "GAP":
                 return CODE_GAP;
+            case "ABC":
+                return CODE_ABC;
             default:
                 return CODE_NONE;
         }
@@ -128,6 +132,8 @@ public class KeyConfig {
                 return "Sym";
             case CODE_GAP:
                 return "Gap";
+            case CODE_ABC:
+                return "abc";
             default:
                 return "";
         }

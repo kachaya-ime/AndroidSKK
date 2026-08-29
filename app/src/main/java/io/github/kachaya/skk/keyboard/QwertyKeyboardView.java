@@ -28,6 +28,9 @@ public class QwertyKeyboardView extends KeyboardView {
     /** 現在画面に構築されているレイアウト。 */
     private KeyConfig[][] mCurrentLayout;
 
+    /** レイアウトのベースキー名。 */
+    private String mBaseKey = "custom_qwerty_layout";
+
     /** 1行あたりの高さ。 */
     private int mRowHeight;
     /** 現在の Shift 状態。 */
@@ -46,6 +49,13 @@ public class QwertyKeyboardView extends KeyboardView {
 
     public QwertyKeyboardView(Context context) {
         super(context);
+        setOrientation(VERTICAL);
+        readPrefs();
+    }
+
+    public QwertyKeyboardView(Context context, String baseKey) {
+        super(context);
+        mBaseKey = baseKey;
         setOrientation(VERTICAL);
         readPrefs();
     }
@@ -73,9 +83,9 @@ public class QwertyKeyboardView extends KeyboardView {
         if (mRowHeight <= 0) {
             mRowHeight = (int) getResources().getDimension(R.dimen.button_height);
         }
-        mNormalLayout = loadIndependentLayout("custom_qwerty_layout", "_normal", DefaultLayouts.get(getContext(), "custom_qwerty_layout_normal"));
-        mShiftLayout = loadIndependentLayout("custom_qwerty_layout", "_shift", DefaultLayouts.get(getContext(), "custom_qwerty_layout_shift"));
-        mSymbolLayout = loadIndependentLayout("custom_qwerty_layout", "_symbol", DefaultLayouts.get(getContext(), "custom_qwerty_layout_symbol"));
+        mNormalLayout = loadIndependentLayout(mBaseKey, "_normal", DefaultLayouts.get(getContext(), mBaseKey + "_normal"));
+        mShiftLayout = loadIndependentLayout(mBaseKey, "_shift", DefaultLayouts.get(getContext(), mBaseKey + "_shift"));
+        mSymbolLayout = loadIndependentLayout(mBaseKey, "_symbol", DefaultLayouts.get(getContext(), mBaseKey + "_symbol"));
 
         updateLayout();
     }

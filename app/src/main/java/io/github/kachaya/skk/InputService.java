@@ -963,6 +963,11 @@ public class InputService extends InputMethodService implements SharedPreference
         // ステータスアイコンは座標に依存しないため、即座に更新する
         updateStatusIcon();
 
+        // キーボードのモード表示等も更新する
+        if (mInputView != null) {
+            mInputView.updateKeys(mEngine.getCurrentTooltip(), getIconResourceId(mEngine.getCurrentIcon()));
+        }
+
         // ツールチップは座標が必要なため、保留フラグを立てて実行を試みる
         mNeedsTooltipUpdate = true;
         performTooltipUpdate();

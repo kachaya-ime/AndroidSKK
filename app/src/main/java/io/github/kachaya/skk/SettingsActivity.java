@@ -106,17 +106,64 @@ public class SettingsActivity extends AppCompatActivity {
 
             ListPreference keyboardTypePref = findPreference("keyboard_type");
             SwitchPreference inputSingleLinePref = findPreference("input_single_line");
-            if (keyboardTypePref != null && inputSingleLinePref != null) {
+            Preference symbolsCustomizerPref = findPreference("symbols_customizer");
+            Preference qwertyCustomizerPref = findPreference("keyboard_customizer_qwerty");
+            Preference strokeAlignPref = findPreference("stroke_align");
+            Preference strokeWidthPref = findPreference("stroke_width_scale");
+            Preference keyboardHeightPref = findPreference("keyboard_height_scale");
+
+            if (keyboardTypePref != null) {
                 // 初期状態の反映
                 String currentType = keyboardTypePref.getValue();
-                inputSingleLinePref.setEnabled("symbols".equals(currentType));
+                boolean isSymbols = "symbols".equals(currentType);
+                boolean isQwerty = "qwerty".equals(currentType);
+                boolean isStroke = "stroke".equals(currentType);
+
+                if (inputSingleLinePref != null) {
+                    inputSingleLinePref.setEnabled(isSymbols);
+                }
+                if (symbolsCustomizerPref != null) {
+                    symbolsCustomizerPref.setEnabled(isSymbols);
+                }
+                if (qwertyCustomizerPref != null) {
+                    qwertyCustomizerPref.setEnabled(isQwerty);
+                }
+                if (strokeAlignPref != null) {
+                    strokeAlignPref.setEnabled(isStroke);
+                }
+                if (strokeWidthPref != null) {
+                    strokeWidthPref.setEnabled(isStroke);
+                }
+                if (keyboardHeightPref != null) {
+                    keyboardHeightPref.setEnabled(!isStroke);
+                }
 
                 keyboardTypePref.setOnPreferenceChangeListener((preference, newValue) -> {
                     String newType = (String) newValue;
-                    boolean isSymbols = "symbols".equals(newType);
-                    inputSingleLinePref.setEnabled(isSymbols);
-                    if (!isSymbols) {
-                        inputSingleLinePref.setChecked(false);
+                    boolean isSymbolsNew = "symbols".equals(newType);
+                    boolean isQwertyNew = "qwerty".equals(newType);
+                    boolean isStrokeNew = "stroke".equals(newType);
+
+                    if (inputSingleLinePref != null) {
+                        inputSingleLinePref.setEnabled(isSymbolsNew);
+                        if (!isSymbolsNew) {
+                            inputSingleLinePref.setChecked(false);
+                        }
+                    }
+                    if (symbolsCustomizerPref != null) {
+                        symbolsCustomizerPref.setEnabled(isSymbolsNew);
+                    }
+                    if (qwertyCustomizerPref != null) {
+                        qwertyCustomizerPref.setEnabled(isQwertyNew);
+                    }
+                    if (strokeAlignPref != null) {
+                        strokeAlignPref.setEnabled(isStrokeNew);
+                    }
+                    if (strokeWidthPref != null) {
+                        strokeWidthPref.setEnabled(isStrokeNew);
+                    }
+                    if (keyboardHeightPref != null) {
+                        keyboardHeightPref.setEnabled(!isStrokeNew);
                     }
                     return true;
                 });

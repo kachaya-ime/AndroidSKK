@@ -42,6 +42,8 @@ public class StrokeKeyboardView extends KeyboardView {
     private boolean mShiftLockFlag = false;
     /** 現在の Control 状態。 */
     private boolean mCtrlSingleFlag = false;
+    /** 現在のモードアイコン。 */
+    private Drawable mModeIconDrawable = null;
 
     /** 現在描画中の軌跡 Path オブジェクト。 */
     private Path mStrokePath;
@@ -134,6 +136,11 @@ public class StrokeKeyboardView extends KeyboardView {
         mShiftSingleFlag = state.shifted;
         mShiftLockFlag = state.shiftLocked;
         mCtrlSingleFlag = state.control;
+        if (state.modeIconResId != 0) {
+            mModeIconDrawable = ResourcesCompat.getDrawable(getResources(), state.modeIconResId, null);
+        } else {
+            mModeIconDrawable = null;
+        }
         invalidate();
     }
 
@@ -323,5 +330,18 @@ public class StrokeKeyboardView extends KeyboardView {
         }
         mPaint.setStyle(Paint.Style.STROKE);
         canvas.drawPath(mStrokePath, mPaint);
+
+        // モード表示
+        if (mModeIconDrawable != null) {
+            // 右上に表示。余白は h * 0.05f 程度、サイズは h * 0.1f 程度
+            float size = h * 0.1f;
+            float margin = h * 0.05f;
+            int leftMode = (int) (w - margin - size);
+            int topMode = (int) margin;
+            int rightMode = (int) (w - margin);
+            int bottomMode = (int) (margin + size);
+            mModeIconDrawable.setBounds(leftMode, topMode, rightMode, bottomMode);
+            mModeIconDrawable.draw(canvas);
+        }
     }
 }

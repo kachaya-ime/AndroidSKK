@@ -34,4 +34,26 @@
         <item>top</item>
         <item>bottom</item>
     </string-array>
+
+    <string-array name="stroke_aligns">
+        <item>左寄せ</item>
+        <item>右寄せ</item>
+    </string-array>
+    <string-array name="stroke_align_values">
+        <item>left</item>
+        <item>right</item>
+    </string-array>
+
+    <string-array name="stroke_widths">
+        <item>100% (標準)</item>
+        <item>90%</item>
+        <item>80%</item>
+        <item>70%</item>
+    </string-array>
+    <string-array name="stroke_width_values">
+        <item>1.0</item>
+        <item>0.9</item>
+        <item>0.8</item>
+        <item>0.7</item>
+    </string-array>
 </resources>

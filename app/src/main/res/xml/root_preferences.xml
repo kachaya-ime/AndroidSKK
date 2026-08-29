@@ -96,23 +96,7 @@
         android:title="キーボードの高さ"
         app:useSimpleSummaryProvider="true"
         />
-    <Preference
-        android:key="keyboard_customizer_qwerty"
-        android:summary="QWERTYキーボードのキー配列をカスタマイズします"
-        android:title="QWERTYキー配列のカスタマイズ"
-        >
-        <intent
-            android:targetClass="io.github.kachaya.skk.keyboard.KeyboardCustomizerActivity"
-            android:targetPackage="io.github.kachaya.skk"
-            >
-            <extra android:name="pref_key"
-                android:value="custom_qwerty_layout"
-                />
-            <extra android:name="title"
-                android:value="QWERTY配列のカスタマイズ"
-                />
-        </intent>
-    </Preference>
+
     <Preference
         android:key="symbols_customizer"
         android:summary="記号バーのキー配列をカスタマイズします"
@@ -130,6 +114,42 @@
                 />
         </intent>
     </Preference>
+
+    <Preference
+        android:key="keyboard_customizer_qwerty"
+        android:summary="QWERTYキーボードのキー配列をカスタマイズします"
+        android:title="QWERTYキー配列のカスタマイズ"
+        >
+        <intent
+            android:targetClass="io.github.kachaya.skk.keyboard.KeyboardCustomizerActivity"
+            android:targetPackage="io.github.kachaya.skk"
+            >
+            <extra android:name="pref_key"
+                android:value="custom_qwerty_layout"
+                />
+            <extra android:name="title"
+                android:value="QWERTY配列のカスタマイズ"
+                />
+        </intent>
+    </Preference>
+
+    <ListPreference
+        android:defaultValue="right"
+        android:entries="@array/stroke_aligns"
+        android:entryValues="@array/stroke_align_values"
+        android:key="stroke_align"
+        android:title="ストロークキーボードの寄せ方向"
+        app:useSimpleSummaryProvider="true"
+        />
+    <ListPreference
+        android:defaultValue="1.0"
+        android:entries="@array/stroke_widths"
+        android:entryValues="@array/stroke_width_values"
+        android:key="stroke_width_scale"
+        android:title="ストロークキーボードの幅"
+        app:useSimpleSummaryProvider="true"
+        />
+
     <SwitchPreference
         android:defaultValue="true"
         android:key="haptic_feedback"

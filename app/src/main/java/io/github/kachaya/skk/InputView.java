@@ -3,7 +3,9 @@ package io.github.kachaya.skk;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.util.Log;
+import android.util.TypedValue;
 import android.view.ContextThemeWrapper;
+import android.view.Gravity;
 import android.view.HapticFeedbackConstants;
 import android.view.KeyEvent;
 import android.view.LayoutInflater;
@@ -22,6 +24,7 @@ import androidx.preference.PreferenceManager;
 import java.util.List;
 
 import io.github.kachaya.skk.engine.Candidate;
+import io.github.kachaya.skk.keyboard.DefaultLayouts;
 import io.github.kachaya.skk.keyboard.KeyConfig;
 import io.github.kachaya.skk.keyboard.KeyboardState;
 import io.github.kachaya.skk.keyboard.KeyboardView;
@@ -62,9 +65,19 @@ public class InputView extends LinearLayout {
 
     /** 画面サイズに合わせて調整されたボタンの高さ。 */
     private int mAdjustedButtonHeight;
+    /** 画面サイズに合わせて調整された候補ビューの高さ。 */
+    private int mAdjustedCandidateHeight;
+    /** 画面サイズに合わせて調整された候補のテキストサイズ（ピクセル）。 */
+    private float mAdjustedCandidateTextSize;
 
     /** キーボードの種類 ("symbols" または "qwerty" または "stroke")。 */
     private String mKeyboardType;
+
+    /** ストロークキーボードの寄せ方向 ("left", "center", "right")。 */
+    private String mStrokeAlign;
+    /** ストロークキーボードの幅の倍率。 */
+    private float mStrokeWidthScale;
+
     /** QWERTY キーボードでの Shift 状態。 */
     private boolean mIsShifted = false;
     /** QWERTY キーボードでの Shift ロック状態。 */
@@ -75,6 +88,10 @@ public class InputView extends LinearLayout {
     private boolean mIsSymbol = false;
     /** QWERTY キーボードでの 記号 ロック状態。 */
     private boolean mIsSymbolLocked = false;
+    /** 現在のモードテキスト（「あ」「ア」等）。 */
+    private String mModeText = "";
+    /** 現在のモードアイコンのリソース ID。 */
+    private int mModeIconResId = 0;
 
     /** 現在画面に表示されている候補ボタンの配列。 */
     private Button[] mCandidateButton;
@@ -84,6 +101,8 @@ public class InputView extends LinearLayout {
 
     /** レイアウトの最終更新日時。キャッシュの無効化判定に使用します。 */
     private long mLayoutUpdatedAt = 0;
+    /** キーボードの行数（レイアウトに基づく）。 */
+    private int mRowCount = 4;
 
     /**
      * InputView インスタンスを生成し、初期セットアップを行います。
@@ -106,8 +125,12 @@ public class InputView extends LinearLayout {
         // システムナビゲーションバー（3ボタンナビ等）との重なりを防止するためのインセット処理
         ViewCompat.setOnApplyWindowInsetsListener(this, (v, insets) -> {
             Insets systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars());
-            // ナビゲーションバーの高さを底部のパディングとして設定
-            v.setPadding(v.getPaddingLeft(), v.getPaddingTop(), v.getPaddingRight(), systemBars.bottom);
+            // ナビゲーションバーの高さを底部のパディングとして設定し、
+            // 左右のインセット（カメラパンチホール等）も考慮する
+            v.setPadding(systemBars.left, v.getPaddingTop(), systemBars.right, systemBars.bottom);
+
+            // インセットが変わった場合（回転時など）、ボタンの高さを再計算する必要がある可能性がある
+            readPrefs();
             return insets;
         });
     }
@@ -118,7 +141,16 @@ public class InputView extends LinearLayout {
         // 全体の高さを画面の半分までに制限します。
         // ただし、最小サイズを確保した結果それを超える場合は操作性を優先します。
         int screenHeight = getResources().getDisplayMetrics().heightPixels;
-        int maxHeight = Math.max(screenHeight / 2, mAdjustedButtonHeight * 5);
+        int screenWidth = getResources().getDisplayMetrics().widthPixels;
+        // ナビゲーションバーのパディング分を考慮して最大高さを計算する
+        int expectedKeyboardHeight;
+        if ("stroke".equals(mKeyboardType)) {
+            int baseSize = Math.min(screenWidth, screenHeight);
+            expectedKeyboardHeight = (int) (baseSize * mStrokeWidthScale) / 2;
+        } else {
+            expectedKeyboardHeight = mAdjustedButtonHeight * mRowCount;
+        }
+        int maxHeight = Math.max(screenHeight / 2, mAdjustedCandidateHeight + expectedKeyboardHeight) + getPaddingBottom();
 
         int heightMode = MeasureSpec.getMode(heightMeasureSpec);
         int heightSize = MeasureSpec.getSize(heightMeasureSpec);
@@ -173,9 +205,30 @@ public class InputView extends LinearLayout {
         String defaultType = hasHardwareKeyboard ? "symbols" : "qwerty";
 
         String type = prefs.getString("keyboard_type", defaultType);
+        mStrokeAlign = prefs.getString("stroke_align", "right");
+        float strokeWidthScale = 1.0f;
+        try {
+            strokeWidthScale = Float.parseFloat(prefs.getString("stroke_width_scale", "1.0"));
+        } catch (Exception e) {
+            // ignore
+        }
+        mStrokeWidthScale = strokeWidthScale;
+
         float heightScale = 1.0f;
         try {
             heightScale = Float.parseFloat(prefs.getString("keyboard_height_scale", "1.0"));
+        } catch (Exception e) {
+            // ignore
+        }
+        float candidateHeightScale = 1.0f;
+        try {
+            candidateHeightScale = Float.parseFloat(prefs.getString("candidate_height_scale", "1.0"));
+        } catch (Exception e) {
+            // ignore
+        }
+        float candidateTextSizeScale = 1.0f;
+        try {
+            candidateTextSizeScale = Float.parseFloat(prefs.getString("candidate_text_size_scale", "1.0"));
         } catch (Exception e) {
             // ignore
         }
@@ -185,8 +238,12 @@ public class InputView extends LinearLayout {
         boolean changed = (mKeyboardType != null) && (
                 !type.equals(mKeyboardType) ||
                         updatedAt != mLayoutUpdatedAt ||
+                        mStrokeWidthScale != strokeWidthScale ||
+                        !mStrokeAlign.equals(prefs.getString("stroke_align", "right")) ||
                         mInputSingleLine != (singleLine && "symbols".equals(type))
         );
+        mStrokeAlign = prefs.getString("stroke_align", "right");
+        mStrokeWidthScale = strokeWidthScale;
 
         mHapticEnabled = haptic;
         mKeyboardType = type;
@@ -197,14 +254,46 @@ public class InputView extends LinearLayout {
         int screenHeight = getResources().getDisplayMetrics().heightPixels;
         float density = getResources().getDisplayMetrics().density;
         int defaultButtonHeight = (int) (getResources().getDimension(R.dimen.button_height) * heightScale);
-        int minButtonHeight = (int) (32 * density); // 最小32dpを確保
 
-        // QWERTY（4行）+ 候補（1行）の計5行が画面の半分に収まるように制限
-        int maxAllowedHeight = (screenHeight / 2) / 5;
+        // レイアウトの行数を取得する（QWERTYは4行とは限らない。ストロークはキーを持たない）
+        if ("stroke".equals(type)) {
+            mRowCount = 0; // キーを持たない
+        } else if ("symbols".equals(type)) {
+            mRowCount = 1;
+        } else {
+            String baseKey = "custom_qwerty_layout";
+            String layoutStr = LayoutManager.loadLayout(getContext(), baseKey + "_normal", DefaultLayouts.get(getContext(), baseKey + "_normal"));
+            KeyConfig[][] layout = KeyConfig.layoutFromAnyString(layoutStr);
+            mRowCount = Math.max(1, layout.length);
+        }
+
+        // ストロークキーボードの場合はキーをタッチするわけではない（キー自体が存在しない）ので、
+        // 最小高さの制限を設けない
+        int minButtonHeight = "stroke".equals(type) ? 0 : (int) (32 * density);
+
+        // 各キーボードの行数 + 候補（1行）の計が「使用可能な画面の半分」に収まるように制限
+        // ナビゲーションバーのパディング（getPaddingBottom）を差し引いた高さを基準にする
+        int availableHeight = Math.max(0, screenHeight - getPaddingBottom());
+        int totalRows;
+        if ("stroke".equals(type)) {
+            // ストロークの場合、キーボードの高さは幅に依存するため、
+            // ここでは候補ビューのための「標準的な」高さを確保するために 5 行分（4行+候補1行）として計算
+            totalRows = 5;
+        } else {
+            totalRows = mRowCount + 1;
+        }
+        int maxAllowedHeight = (availableHeight / 2) / totalRows;
         int newAdjustedButtonHeight = Math.max(minButtonHeight, Math.min(defaultButtonHeight, maxAllowedHeight));
 
-        if (mAdjustedButtonHeight != newAdjustedButtonHeight) {
+        int newAdjustedCandidateHeight = (int) (getResources().getDimension(R.dimen.candidate_height) * candidateHeightScale);
+        float newAdjustedCandidateTextSize = getResources().getDimension(R.dimen.candidate_text_size) * candidateTextSizeScale;
+
+        if (mAdjustedButtonHeight != newAdjustedButtonHeight ||
+                mAdjustedCandidateHeight != newAdjustedCandidateHeight ||
+                mAdjustedCandidateTextSize != newAdjustedCandidateTextSize) {
             mAdjustedButtonHeight = newAdjustedButtonHeight;
+            mAdjustedCandidateHeight = newAdjustedCandidateHeight;
+            mAdjustedCandidateTextSize = newAdjustedCandidateTextSize;
             changed = (mKeyboardType != null); // 高さが変わった場合も再描画が必要
         }
 
@@ -212,7 +301,7 @@ public class InputView extends LinearLayout {
         if (mCandidatesView != null) {
             ViewGroup.LayoutParams lp = mCandidatesView.getLayoutParams();
             if (lp != null) {
-                lp.height = mAdjustedButtonHeight;
+                lp.height = mAdjustedCandidateHeight;
                 mCandidatesView.setLayoutParams(lp);
             }
         }
@@ -255,7 +344,9 @@ public class InputView extends LinearLayout {
                 sv.setOnKeyActionListener(this::onClickKey);
                 sv.setOnHelpListener(() -> mInputService.showStrokeHelp());
                 mCurrentKeyboardView = sv;
-                height = 4 * mAdjustedButtonHeight;
+                // ストロークエリアの高さは、幅（baseSize * scale）の半分として計算される
+                int baseSize = Math.min(getResources().getDisplayMetrics().widthPixels, getResources().getDisplayMetrics().heightPixels);
+                height = (int) (baseSize * mStrokeWidthScale) / 2;
                 break;
             default:
                 SymbolKeyboardView syv = new SymbolKeyboardView(getContext());
@@ -266,18 +357,56 @@ public class InputView extends LinearLayout {
         }
 
         if (mCurrentKeyboardView != null) {
-            mKeyboardLayout.addView(mCurrentKeyboardView, new LayoutParams(LayoutParams.MATCH_PARENT, height));
+            LayoutParams lp = new LayoutParams(LayoutParams.MATCH_PARENT, height);
+            if (mCurrentKeyboardView instanceof StrokeKeyboardView) {
+                int screenWidth = getResources().getDisplayMetrics().widthPixels;
+                int screenHeight = getResources().getDisplayMetrics().heightPixels;
+                int baseSize = Math.min(screenWidth, screenHeight);
+                int targetWidth = (int) (baseSize * mStrokeWidthScale);
+                lp.width = targetWidth;
+                lp.height = targetWidth / 2;
+
+                int gravity = Gravity.END;
+                if ("left".equals(mStrokeAlign)) {
+                    gravity = Gravity.START;
+                }
+                lp.gravity = gravity;
+            }
+            mKeyboardLayout.addView(mCurrentKeyboardView, lp);
         }
         updateKeys();
     }
 
     /**
      * キーボードのラベルを現在の状態に合わせて更新します。
+     *
+     * @param modeText      現在のモードテキスト
+     * @param modeIconResId 現在のモードアイコンのリソース ID
      */
-    private void updateKeys() {
+    public void updateKeys(String modeText, int modeIconResId) {
+        mModeText = modeText;
+        mModeIconResId = modeIconResId;
         if (mCurrentKeyboardView != null) {
-            mCurrentKeyboardView.updateState(new KeyboardState(mIsShifted, mIsShiftLocked, mIsControl, mIsSymbol, mIsSymbolLocked));
+            mCurrentKeyboardView.updateState(new KeyboardState(mIsShifted, mIsShiftLocked, mIsControl, mIsSymbol, mIsSymbolLocked, mModeText, mModeIconResId));
         }
+    }
+
+    /**
+     * キーボードのラベルを現在の状態に合わせて更新します。
+     *
+     * @param modeText 現在のモードテキスト
+     * @deprecated {@link #updateKeys(String, int)} を使用してください。
+     */
+    @Deprecated
+    public void updateKeys(String modeText) {
+        updateKeys(modeText, mModeIconResId);
+    }
+
+    /**
+     * キーボードのラベルを現在の状態に合わせて更新します（内部保持しているモードテキストとアイコンを使用）。
+     */
+    public void updateKeys() {
+        updateKeys(mModeText, mModeIconResId);
     }
 
     /**
@@ -468,6 +597,7 @@ public class InputView extends LinearLayout {
 
         for (int i = 0; i < candidates.size(); i++) {
             Button b = new Button(new ContextThemeWrapper(getContext(), style), null, style);
+            b.setTextSize(TypedValue.COMPLEX_UNIT_PX, mAdjustedCandidateTextSize);
             b.setOnClickListener(this::onClickCandidateButton);
             b.setTag(i);
             b.setText(candidates.get(i));
@@ -498,6 +628,7 @@ public class InputView extends LinearLayout {
             int style = c.isUserDict ? R.style.UserCandidateButton : R.style.CandidateButton;
 
             Button b = new Button(new ContextThemeWrapper(getContext(), style), null, style);
+            b.setTextSize(TypedValue.COMPLEX_UNIT_PX, mAdjustedCandidateTextSize);
             b.setOnClickListener(this::onClickCandidateButton);
             b.setTag(i);
 
