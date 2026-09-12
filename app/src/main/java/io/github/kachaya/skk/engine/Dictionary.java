@@ -4,22 +4,27 @@ import android.content.Context;
 import android.content.res.AssetFileDescriptor;
 import android.util.Log;
 
+import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.io.OutputStream;
+import java.nio.charset.Charset;
+import java.nio.charset.CharsetDecoder;
+import java.nio.charset.CodingErrorAction;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.Iterator;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-import io.github.kachaya.skk.R;
 
 import jdbm.RecordManager;
 import jdbm.RecordManagerFactory;
@@ -40,6 +45,8 @@ public class Dictionary {
 
     /** システム辞書の DB ファイルベース名。 */
     private static final String MAIN_DICT = "skk_main_dict";
+    /** インポート辞書の DB ファイルベース名。 */
+    private static final String IMPORTED_DICT = "skk_imported_dict";
     /** ユーザー辞書の DB ファイルベース名。 */
     private static final String USER_DICT = "skk_user_dict";
     /** DB 内で使用する BTree の名前。 */
@@ -50,6 +57,10 @@ public class Dictionary {
     private final String mFilesDirPath;
     /** システム辞書（読み取り専用）の BTree インスタンス。 */
     private BTree mBTreeMainDict;
+    /** インポート辞書の永続化を管理するレコードマネージャ。 */
+    private RecordManager mRecManImportedDict;
+    /** インポート辞書（読み書き可能）の BTree インスタンス。 */
+    private BTree mBTreeImportedDict;
     /** ユーザー辞書の永続化を管理するレコードマネージャ。 */
     private RecordManager mRecManUserDict;
     /** ユーザー辞書（読み書き可能）の BTree インスタンス。 */
@@ -78,12 +89,28 @@ public class Dictionary {
         mFilesDirPath = context.getFilesDir().getAbsolutePath();
         // システム辞書のロード
         try {
-            copyFromResRaw(context);
+            copySystemDict(context);
             RecordManager recMan = RecordManagerFactory.createRecordManager(mFilesDirPath + "/" + MAIN_DICT);
             mBTreeMainDict = BTree.load(recMan, recMan.getNamedObject(BTREE_NAME));
         } catch (IOException e) {
             Log.e("Dictionary", "MainDictionary: " + e.getMessage());
             mBTreeMainDict = null;
+        }
+        // インポート辞書のロード（存在しない場合は新規作成）
+        try {
+            mRecManImportedDict = RecordManagerFactory.createRecordManager(mFilesDirPath + "/" + IMPORTED_DICT);
+            long recId = mRecManImportedDict.getNamedObject(BTREE_NAME);
+            if (recId == 0) {
+                mBTreeImportedDict = BTree.createInstance(mRecManImportedDict, new StringComparator());
+                mRecManImportedDict.setNamedObject(BTREE_NAME, mBTreeImportedDict.getRecid());
+                mRecManImportedDict.commit();
+            } else {
+                mBTreeImportedDict = BTree.load(mRecManImportedDict, recId);
+            }
+        } catch (IOException e) {
+            Log.e("Dictionary", "ImportedDictionary: " + e.getMessage());
+            mRecManImportedDict = null;
+            mBTreeImportedDict = null;
         }
         // ユーザー辞書のロード（存在しない場合は新規作成）
         try {
@@ -150,24 +177,24 @@ public class Dictionary {
     }
 
     /**
-     * 実行バイナリ内のリソース（raw）から、システム辞書の DB ファイルを内部ストレージへ展開します。
+     * アセットから、システム辞書の DB ファイルを内部ストレージへ展開します。
      * ファイルサイズが一致する場合はコピーをスキップします。
      *
      * @param context コンテキスト
      * @throws IOException ファイルアクセスエラー時にスローされます
      */
-    private void copyFromResRaw(Context context) throws IOException {
+    private void copySystemDict(Context context) throws IOException {
         String dbFileName = mFilesDirPath + "/" + MAIN_DICT + ".db";
         File dbFile = new File(dbFileName);
 
-        try (AssetFileDescriptor afd = context.getResources().openRawResourceFd(R.raw.skk_main_dict)) {
+        try (AssetFileDescriptor afd = context.getAssets().openFd(MAIN_DICT + ".db")) {
             if (afd != null && afd.getLength() == dbFile.length()) {
                 return;
             }
         } catch (Exception ignored) {
         }
 
-        try (InputStream is = context.getResources().openRawResource(R.raw.skk_main_dict);
+        try (InputStream is = context.getAssets().open(MAIN_DICT + ".db");
              OutputStream os = Files.newOutputStream(Paths.get(dbFileName))) {
             byte[] buf = new byte[16 * 1024];
             int size;
@@ -212,7 +239,26 @@ public class Dictionary {
     }
 
     /**
-     * システムおよびユーザー辞書から変換候補を検索し、統合されたリストを返します。
+     * 指定された BTree から、指定された見出し語に対応する候補群（生データ）を抽出します。
+     *
+     * @param key 見出し語
+     * @param bTree 検索対象の BTree
+     * @return スラッシュで区切られた候補の配列。存在しない場合は null。
+     */
+    private String[] getCandidatesFromBTree(String key, BTree bTree) {
+        if (bTree == null) return null;
+        String value;
+        try {
+            value = (String) bTree.find(key);
+        } catch (IOException e) {
+            return null;
+        }
+        if (value == null) return null;
+        return value.substring(1).split("/");
+    }
+
+    /**
+     * システム辞書、インポート辞書、およびユーザー辞書から変換候補を検索し、統合されたリストを返します。
      * <p>
      * 検索キーに数字が含まれる場合、SKK の仕様に基づき数字を '#' に置換して検索を行います。
      * 検索結果は、ユーザー辞書の学習内容（直近に選択されたもの）が優先的に先頭に配置されます。
@@ -237,14 +283,30 @@ public class Dictionary {
             searchKey = m.replaceAll("#");
         }
 
-        // システム辞書の検索
         List<String> list1 = new ArrayList<>();
-        String[] cands = getMainDictCandidates(searchKey);
-        if (cands != null) {
-            Collections.addAll(list1, cands);
+        Set<String> set1 = new HashSet<>();
+
+        // 1. システム辞書の検索
+        String[] cands1 = getCandidatesFromBTree(searchKey, mBTreeMainDict);
+        if (cands1 != null) {
+            for (String c : cands1) {
+                if (!c.isEmpty() && set1.add(c)) {
+                    list1.add(c);
+                }
+            }
         }
 
-        // ユーザー辞書の検索
+        // 2. インポート辞書の検索
+        String[] cands2 = getCandidatesFromBTree(searchKey, mBTreeImportedDict);
+        if (cands2 != null) {
+            for (String c : cands2) {
+                if (!c.isEmpty() && set1.add(c)) {
+                    list1.add(c);
+                }
+            }
+        }
+
+        // 3. ユーザー辞書の検索
         Entry entry = getUserDictEntry(searchKey);
         List<String> list2 = (entry != null) ? entry.candidates : null;
         Set<String> userCandsSet = new HashSet<>();
@@ -293,15 +355,25 @@ public class Dictionary {
      * 動的補完のために、指定された文字列で始まる見出し語を検索します。
      *
      * @param key 入力途中のプレフィックス
-     * @return 前方一致する見出し語のリスト。システム・ユーザー辞書の両方から取得されます。
+     * @return 前方一致する見出し語のリスト。システム・インポート・ユーザー辞書から取得されます。
      */
     public List<String> findSuggestions(String key) {
-        List<String> list = new ArrayList<>(findKeys(key, mBTreeMainDict));
-        List<String> list2 = findKeys(key, mBTreeUserDict);
-        int idx = 0;
-        for (String s : list2) {
-            list.remove(s);
-            list.add(idx++, s);
+        Set<String> set = new LinkedHashSet<>();
+        if (mBTreeMainDict != null) {
+            set.addAll(findKeys(key, mBTreeMainDict));
+        }
+        if (mBTreeImportedDict != null) {
+            set.addAll(findKeys(key, mBTreeImportedDict));
+        }
+        List<String> list = new ArrayList<>(set);
+
+        if (mBTreeUserDict != null) {
+            List<String> list2 = findKeys(key, mBTreeUserDict);
+            int idx = 0;
+            for (String s : list2) {
+                list.remove(s);
+                list.add(idx++, s);
+            }
         }
         return list;
     }
@@ -418,6 +490,205 @@ public class Dictionary {
         } catch (IOException ignored) {
         }
         return list;
+    }
+
+    /**
+     * 仮名文字列内の結合用濁点表記（例: "う゛"）を単一の対応文字（"ゔ"）に正規化します。
+     *
+     * @param s 対象の文字列
+     * @return 正規化後の文字列
+     */
+    public static String normalizeKana(String s) {
+        if (s == null) return null;
+        return s.replace("う゛", "\u3094");
+    }
+
+    /**
+     * スラッシュ（/）区切りの候補文字列を分割します（Lisp括弧を考慮）。
+     *
+     * @param s 候補部分の文字列
+     * @return 分割された各候補のリスト
+     */
+    public static List<String> splitCandidates(String s) {
+        List<String> res = new ArrayList<>();
+        int start = 0;
+        int nest = 0;
+        for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
+            if (c == '(') nest++;
+            else if (c == ')') nest--;
+            else if (c == '/' && nest == 0) {
+                res.add(s.substring(start, i));
+                start = i + 1;
+            }
+        }
+        if (start < s.length()) {
+            res.add(s.substring(start));
+        }
+        return res;
+    }
+
+    /**
+     * インポート進捗を通知・制御するためのリスナーインターフェースです。
+     */
+    public interface ImportProgressListener {
+        void onProgress(int count, String currentKey);
+        boolean isCancelled();
+    }
+
+    /**
+     * SKK辞書テキスト（SKK-JISYO.L 等）をストリーミング形式でインポート辞書へ保存します。
+     *
+     * @param inputStream インポート元の InputStream
+     * @param charsetName 文字コード名 ("UTF-8", "EUC-JP" など)
+     * @param listener 進捗リスナー
+     * @return インポートされたエントリ数
+     * @throws IOException 読み込みまたはデコードエラーが発生した場合
+     */
+    public int importSkkDictionary(InputStream inputStream, String charsetName, ImportProgressListener listener) throws IOException {
+        if (mBTreeImportedDict == null || mRecManImportedDict == null) {
+            return 0;
+        }
+
+        Charset charset = Charset.forName(charsetName);
+        CharsetDecoder decoder = charset.newDecoder()
+                .onMalformedInput(CodingErrorAction.REPORT)
+                .onUnmappableCharacter(CodingErrorAction.REPORT);
+
+        BufferedReader br = new BufferedReader(new InputStreamReader(inputStream, decoder));
+        String line;
+        int count = 0;
+        int batch = 0;
+
+        while ((line = br.readLine()) != null) {
+            if (listener != null && listener.isCancelled()) {
+                break;
+            }
+
+            if (line.startsWith(";;") || line.trim().isEmpty()) {
+                continue;
+            }
+
+            int idx = -1;
+            for (int i = 0; i < line.length(); i++) {
+                char c = line.charAt(i);
+                if (c == ' ' || c == '\t') {
+                    idx = i;
+                    break;
+                }
+            }
+            if (idx == -1) {
+                continue;
+            }
+
+            line = normalizeKana(line);
+            String key = line.substring(0, idx).trim();
+            String candidatesPart = line.substring(idx + 1).trim();
+
+            if (key.isEmpty() || candidatesPart.isEmpty()) {
+                continue;
+            }
+
+            mergeImportedEntry(key, candidatesPart);
+
+            count++;
+            batch++;
+
+            if (batch >= 2000) {
+                mRecManImportedDict.commit();
+                batch = 0;
+                if (listener != null) {
+                    listener.onProgress(count, key);
+                }
+            }
+        }
+
+        mRecManImportedDict.commit();
+        return count;
+    }
+
+    /**
+     * インポートした見出し語と候補群をインポート辞書にマージします。
+     *
+     * @param key 見出し語キー
+     * @param rawCandidatesPart 候補部分の文字列（例: "/候補1/候補2/"）
+     */
+    private void mergeImportedEntry(String key, String rawCandidatesPart) {
+        String existingValue = null;
+        try {
+            existingValue = (String) mBTreeImportedDict.find(key);
+        } catch (IOException ignored) {
+        }
+
+        String content = rawCandidatesPart;
+        if (content.startsWith("/")) content = content.substring(1);
+        if (content.endsWith("/")) content = content.substring(0, content.length() - 1);
+
+        if (existingValue == null) {
+            List<String> items = splitCandidates(content);
+            if (items.isEmpty()) return;
+
+            StringBuilder sb = new StringBuilder("/");
+            for (String item : items) {
+                if (!item.isEmpty()) {
+                    sb.append(item).append("/");
+                }
+            }
+            if (sb.length() <= 1) return;
+
+            try {
+                mBTreeImportedDict.insert(key, sb.toString(), true);
+            } catch (IOException ignored) {
+            }
+            return;
+        }
+
+        // 既存エントリが存在する場合、重複を除いて追記マージ
+        String existingContent = existingValue.startsWith("/") ? existingValue.substring(1) : existingValue;
+        if (existingContent.endsWith("/")) {
+            existingContent = existingContent.substring(0, existingContent.length() - 1);
+        }
+
+        List<String> currentCands = splitCandidates(existingContent);
+        Set<String> currentSet = new HashSet<>(currentCands);
+
+        List<String> newItems = splitCandidates(content);
+        boolean changed = false;
+        for (String item : newItems) {
+            if (item.isEmpty()) continue;
+            if (!currentSet.contains(item)) {
+                currentCands.add(item);
+                currentSet.add(item);
+                changed = true;
+            }
+        }
+
+        if (!changed) return;
+
+        StringBuilder new_val = new StringBuilder("/");
+        for (String str : currentCands) {
+            new_val.append(str).append("/");
+        }
+
+        try {
+            mBTreeImportedDict.insert(key, new_val.toString(), true);
+        } catch (IOException ignored) {
+        }
+    }
+
+    /**
+     * インポート辞書の全内容を削除し、データベースをクリアします。
+     */
+    public void clearImportedDictionary() {
+        if (mBTreeImportedDict == null || mRecManImportedDict == null) return;
+        try {
+            mBTreeImportedDict = BTree.createInstance(mRecManImportedDict, new StringComparator());
+            mRecManImportedDict.setNamedObject(BTREE_NAME, mBTreeImportedDict.getRecid());
+            mRecManImportedDict.commit();
+            Log.d("Dictionary", "Cleared all entries from imported dictionary.");
+        } catch (IOException e) {
+            Log.e("Dictionary", "Failed to clear imported dictionary", e);
+        }
     }
 
     /**

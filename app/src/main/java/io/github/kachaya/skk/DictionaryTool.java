@@ -10,7 +10,10 @@ import android.view.MenuInflater;
 import android.view.MenuItem;
 import android.view.View;
 import android.widget.ArrayAdapter;
+import android.widget.LinearLayout;
 import android.widget.ListView;
+import android.widget.ProgressBar;
+import android.widget.TextView;
 
 import androidx.activity.result.ActivityResult;
 import androidx.activity.result.ActivityResultLauncher;
@@ -21,14 +24,16 @@ import androidx.appcompat.app.AppCompatActivity;
 
 import com.google.android.material.snackbar.Snackbar;
 
-import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.io.OutputStreamWriter;
+import java.nio.charset.CharacterCodingException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 import io.github.kachaya.skk.engine.Dictionary;
 
@@ -50,10 +55,6 @@ public class DictionaryTool extends AppCompatActivity {
             this::onExportActivityResult);
     /** ListView に辞書エントリ（文字列）を表示するためのアダプター。 */
     private ArrayAdapter<String> mAdapter;
-    /** 辞書インポート用のファイル選択を処理する結果ランチャー。 */
-    private final ActivityResultLauncher<Intent> mImportResultLauncher = registerForActivityResult(
-            new ActivityResultContracts.StartActivityForResult(),
-            this::onImportActivityResult);
     /** アクティビティのオプションメニューへの参照。リストの空き状況に応じた動的制御に使用します。 */
     private Menu mOptionsMenu;
 
@@ -213,8 +214,8 @@ public class DictionaryTool extends AppCompatActivity {
         if (mOptionsMenu != null) {
             boolean hasItems = mAdapter.getCount() > 0;
 
-            MenuItem exportItem = mOptionsMenu.findItem(R.id.menu_export);
-            MenuItem clearItem = mOptionsMenu.findItem(R.id.menu_clear);
+            MenuItem exportItem = mOptionsMenu.findItem(R.id.menu_export_user);
+            MenuItem clearItem = mOptionsMenu.findItem(R.id.menu_clear_user);
 
             if (exportItem != null) {
                 exportItem.setEnabled(hasItems);
@@ -235,14 +236,11 @@ public class DictionaryTool extends AppCompatActivity {
     @Override
     public boolean onOptionsItemSelected(@NonNull MenuItem item) {
         int itemId = item.getItemId();
-        if (itemId == R.id.menu_import) {
-            onClickImportDictionary();
-            return true;
-        } else if (itemId == R.id.menu_export) {
+        if (itemId == R.id.menu_export_user) {
             onClickExportDictionary();
             return true;
-        } else if (itemId == R.id.menu_clear) {
-            onClickClearDictionary();
+        } else if (itemId == R.id.menu_clear_user) {
+            onClickClearUserDictionary();
             return true;
         }
         return super.onOptionsItemSelected(item);
@@ -258,32 +256,12 @@ public class DictionaryTool extends AppCompatActivity {
     }
 
     /**
-     * テキスト形式のリストから辞書データを取り込みます。
-     *
-     * @param entries 辞書エントリの文字列リスト
-     */
-    public void importDictionary(List<String> entries) {
-        mDictionary.importUserDictionary(entries);
-    }
-
-    /**
      * 現在のユーザー辞書の内容を文字列リストとして取得します。
      *
      * @return 辞書データ全件のリスト
      */
     public List<String> exportDictionary() {
         return mDictionary.exportUserDictionary();
-    }
-
-    /**
-     * インポート処理（ファイル選択ピッカー）を起動します。
-     */
-    private void onClickImportDictionary() {
-        Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
-        intent.addCategory(Intent.CATEGORY_OPENABLE);
-        intent.setType("text/plain");
-        intent.putExtra(DocumentsContract.EXTRA_INITIAL_URI, getDefaultFileName());
-        mImportResultLauncher.launch(intent);
     }
 
     /**
@@ -295,35 +273,6 @@ public class DictionaryTool extends AppCompatActivity {
         intent.setType("text/plain");
         intent.putExtra(Intent.EXTRA_TITLE, getDefaultFileName());
         mExportResultLauncher.launch(intent);
-    }
-
-    /**
-     * インポートピッカーの結果を受け取り、バックグラウンドでのファイル読み込みと辞書反映を行います。
-     *
-     * @param result ピッカーの戻り値
-     */
-    private void onImportActivityResult(ActivityResult result) {
-        if (result.getResultCode() == Activity.RESULT_OK) {
-            Intent resultData = result.getData();
-            if (resultData != null) {
-                Uri uri = resultData.getData();
-                try {
-                    InputStream inputStream = getContentResolver().openInputStream(uri);
-                    if (inputStream != null) {
-                        BufferedReader reader = new BufferedReader((new InputStreamReader(inputStream)));
-                        String entry;
-                        ArrayList<String> entries = new ArrayList<>();
-                        while ((entry = reader.readLine()) != null) {
-                            entries.add(entry);
-                        }
-                        reader.close();
-                        importDictionary(entries);
-                        refreshList();
-                    }
-                } catch (Exception ignored) {
-                }
-            }
-        }
     }
 
     /**
@@ -352,16 +301,16 @@ public class DictionaryTool extends AppCompatActivity {
     }
 
     /**
-     * ユーザー辞書の全件削除（初期化）を実行します。
+     * ユーザー学習辞書の全件削除（初期化）を実行します。
      * 実行前にユーザーへ警告ダイアログを表示します。
      */
-    private void onClickClearDictionary() {
+    private void onClickClearUserDictionary() {
         new AlertDialog.Builder(this)
-                .setTitle("辞書のクリア")
-                .setMessage("ユーザー辞書のすべての単語を削除します。\nよろしいですか？")
+                .setTitle("学習辞書のクリア")
+                .setMessage("ユーザー学習辞書のすべての単語を削除しますか？\n（インポートした追加辞書は保持されます）")
                 .setPositiveButton("はい、削除します", (dialog, which) -> {
                     mDictionary.clearUserDictionary();
-                    Snackbar.make(findViewById(R.id.list_view), "ユーザー辞書をクリアしました", Snackbar.LENGTH_SHORT).show();
+                    Snackbar.make(findViewById(R.id.list_view), "学習辞書をクリアしました", Snackbar.LENGTH_SHORT).show();
                     refreshList();
                 })
                 .setNegativeButton("いいえ", null)

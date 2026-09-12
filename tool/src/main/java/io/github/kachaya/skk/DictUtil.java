@@ -1,22 +1,24 @@
 package io.github.kachaya.skk;
 
-import java.util.HashMap;
-import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * 辞書作成や文字列処理に関するユーティリティクラス。
+ * 辞書作成や日本語文字列処理に関する独立したユーティリティクラス。
  */
-public class DictUtil {
+public final class DictUtil {
+
+    private DictUtil() {
+    }
 
     /**
-     * 文字列内のカタカナをひらがなに変換します。
+     * 文字列内の全角カタカナをひらがなに変換します。
      *
      * @param s 変換対象の文字列
      * @return 変換後のひらがな文字列
      */
     public static String toHiragana(String s) {
+        if (s == null) return null;
         StringBuilder sb = new StringBuilder();
         for (char c : s.toCharArray()) {
             if (c >= 'ァ' && c <= 'ヶ' || c == 'ヽ' || c == 'ヾ') {
@@ -29,12 +31,13 @@ public class DictUtil {
     }
 
     /**
-     * 文字列内のひらがなをカタカナに変換します。
+     * 文字列内の全角ひらがなをカタカナに変換します。
      *
      * @param s 変換対象の文字列
      * @return 変換後のカタカナ文字列
      */
     public static String toKatakana(String s) {
+        if (s == null) return null;
         StringBuilder sb = new StringBuilder();
         for (char c : s.toCharArray()) {
             if (c >= 'ぁ' && c <= 'ゖ' || c == 'ゝ' || c == 'ゞ') {
@@ -47,19 +50,19 @@ public class DictUtil {
     }
 
     /**
-     * 文字列が日本語文字（漢字、ひらがな、カタカナ、長音）を含んでいるか判定します。
+     * 文字列が英小文字のみで構成されているか判定します。
      *
-     * @param s 判定対象の文字列
-     * @return 日本語文字を含む場合は true
+     * @param s 判定対象の文字列。null の場合は false を返します。
+     * @return 英小文字のみの場合は true
      */
-    public static boolean hasJapanese(String s) {
-        return s.matches(".*[\\p{IsHan}\\p{IsHiragana}\\p{Iskatakana}ー].*");
+    public static boolean isLowerAlphabetOnly(String s) {
+        return s != null && s.matches("^[a-z]+$");
     }
 
     /**
      * 文字列がひらがな（および長音）のみで構成されているか判定します。
      *
-     * @param s 判定対象の文字列
+     * @param s 判定対象の文字列。null の場合は false を返します。
      * @return ひらがなのみの場合は true
      */
     public static boolean isHiraganaOnly(String s) {
@@ -67,9 +70,19 @@ public class DictUtil {
     }
 
     /**
+     * 文字列がカタカナ（および長音）のみで構成されているか判定します。
+     *
+     * @param s 判定対象の文字列。null の場合は false を返します。
+     * @return カタカナのみの場合は true
+     */
+    public static boolean isKatakanaOnly(String s) {
+        return s != null && s.matches("^[\\p{IsKatakana}ー]+$");
+    }
+
+    /**
      * 文字列が仮名（ひらがな・カタカナ・長音）のみで構成されているか判定します。
      *
-     * @param s 判定対象の文字列
+     * @param s 判定対象の文字列。null の場合は false を返します。
      * @return 仮名のみの場合は true
      */
     public static boolean isKanaOnly(String s) {
@@ -77,9 +90,29 @@ public class DictUtil {
     }
 
     /**
-     * 文字列が日本語文字（漢字・ひらがな・カタカナ・長音・〆）のみで構成されているか判定します。
+     * 文字列が漢字のみで構成されているか判定します。
+     *
+     * @param s 判定対象の文字列。null の場合は false を返します。
+     * @return 漢字のみの場合は true
+     */
+    public static boolean isKanjiOnly(String s) {
+        return s != null && s.matches("^[\\p{IsHan}]+$");
+    }
+
+    /**
+     * 文字列が 1 文字の漢字であるか判定します。
      *
      * @param s 判定対象の文字列
+     * @return 1 文字の漢字の場合は true
+     */
+    public static boolean isSingleKanji(String s) {
+        return s != null && s.length() == 1 && isKanjiOnly(s);
+    }
+
+    /**
+     * 文字列が日本語文字（漢字・ひらがな・カタカナ・長音・〆）のみで構成されているか判定します。
+     *
+     * @param s 判定対象の文字列。null の場合は false を返します。
      * @return 日本語文字のみの場合は true
      */
     public static boolean isJapaneseOnly(String s) {
@@ -87,8 +120,17 @@ public class DictUtil {
     }
 
     /**
+     * 文字列が基本的な日本語文字（漢字・ひらがな・カタカナ・長音）のみで構成されているか判定します。
+     *
+     * @param s 判定対象の文字列。null の場合は false を返します。
+     * @return 基本的な日本語文字のみの場合は true
+     */
+    public static boolean isJapaneseTextOnly(String s) {
+        return s != null && s.matches("^[\\p{IsHan}\\p{IsKatakana}\\p{IsHiragana}ー]+$");
+    }
+
+    /**
      * 表記と読みの組み合わせが妥当であるか判定します。
-     * 表記内の非ひらがな部分をワイルドカードとして読みと比較します。
      *
      * @param surface 表記
      * @param reading 読み
@@ -101,48 +143,36 @@ public class DictUtil {
     }
 
     /**
-     * ひらがなから頭文字を取得するためのハッシュマップ
-     */
-    private static final Map<String, String> romajiHeadMap = new HashMap<>() {
-        {
-            put("あ", "a"); put("い", "i"); put("う", "u"); put("え", "e"); put("お", "o");
-            put("か", "k"); put("き", "k"); put("く", "k"); put("け", "k"); put("こ", "k");
-            put("さ", "s"); put("し", "s"); put("す", "s"); put("せ", "s"); put("そ", "s");
-            put("た", "t"); put("ち", "tc"); put("つ", "t"); put("て", "t"); put("と", "t");
-            put("な", "n"); put("に", "n"); put("ぬ", "n"); put("ね", "n"); put("の", "n");
-            put("は", "h"); put("ひ", "h"); put("ふ", "hf"); put("へ", "h"); put("ほ", "h");
-            put("ま", "m"); put("み", "m"); put("む", "m"); put("め", "m"); put("も", "m");
-            put("や", "y"); put("ゆ", "y"); put("よ", "y");
-            put("ら", "r"); put("り", "r"); put("る", "r"); put("れ", "r"); put("ろ", "r");
-            put("わ", "w"); put("を", "w"); put("ん", "n");
-            put("が", "g"); put("ぎ", "g"); put("ぐ", "g"); put("げ", "g"); put("ご", "g");
-            put("ざ", "z"); put("じ", "zj"); put("ず", "z"); put("ぜ", "z"); put("ぞ", "z");
-            put("だ", "d"); put("ぢ", "d"); put("づ", "d"); put("で", "d"); put("ど", "d");
-            put("ば", "b"); put("び", "b"); put("ぶ", "b"); put("べ", "b"); put("ぼ", "b");
-            put("ぱ", "p"); put("ぴ", "p"); put("ぷ", "p"); put("ぺ", "p"); put("ぽ", "p");
-        }
-    };
-
-    /**
-     * ひらがなからローマ文字の先頭の文字（SKK の送り仮名用サフィックス）を取得します。
-     * 複数の候補がある場合は先頭のものを返します。
+     * 2つの文字列に含まれる長音符号（「ー」）の個数が一致するか判定します。
      *
-     * @param hiragana 判定対象のひらがな（1文字以上）
-     * @return ローマ字の頭文字。見つからない場合は null。
+     * @param s1 判定対象の文字列1
+     * @param s2 判定対象の文字列2
+     * @return 一致する場合は true
      */
-    public static String getRomajiHead(String hiragana) {
-        String key = hiragana.substring(0, 1);
-        return romajiHeadMap.get(key);
+    public static boolean matchesChoonCount(String s1, String s2) {
+        if (s1 == null || s2 == null) return false;
+        return countChar(s1, 'ー') == countChar(s2, 'ー');
+    }
+
+    private static int countChar(String s, char c) {
+        int count = 0;
+        for (int i = 0; i < s.length(); i++) {
+            if (s.charAt(i) == c) {
+                count++;
+            }
+        }
+        return count;
     }
 
     /**
-     * 表記を語幹（漢字部分）と送り仮名（ひらがな部分）に分割します。
+     * 表記を語幹（漢字を含む部分）と送り仮名（末尾のひらがな部分）に分割します。
      * 例: "書き" -> ["書", "き"]
      *
      * @param surface 表記
      * @return [語幹, 送り仮名] の配列。分割できない場合は null。
      */
     public static String[] parseSurface(String surface) {
+        if (surface == null) return null;
         Pattern p = Pattern.compile("^(.*\\p{IsHan})(\\p{IsHiragana}+)$");
         Matcher m = p.matcher(surface);
         if (m.find()) {
@@ -153,4 +183,5 @@ public class DictUtil {
         }
         return null;
     }
+
 }

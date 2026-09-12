@@ -3,11 +3,13 @@
     <string-array name="keyboard_types">
         <item>記号バー</item>
         <item>QWERTY</item>
+        <item>Tablet</item>
         <item>ストローク</item>
     </string-array>
     <string-array name="keyboard_type_values">
         <item>symbols</item>
         <item>qwerty</item>
+        <item>tablet</item>
         <item>stroke</item>
     </string-array>
 

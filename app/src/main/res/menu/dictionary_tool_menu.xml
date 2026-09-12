@@ -1,20 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <menu xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:app="http://schemas.android.com/apk/res-auto"
-    >
+    xmlns:app="http://schemas.android.com/apk/res-auto">
     <item
-        android:id="@+id/menu_import"
-        android:title="インポート"
-        app:showAsAction="never"
-        />
+        android:id="@+id/menu_export_user"
+        android:title="学習辞書をエクスポート"
+        app:showAsAction="never" />
     <item
-        android:id="@+id/menu_export"
-        android:title="エクスポート"
-        app:showAsAction="never"
-        />
-    <item
-        android:id="@+id/menu_clear"
-        android:title="すべてクリア"
-        app:showAsAction="never"
-        />
+        android:id="@+id/menu_clear_user"
+        android:title="学習辞書をクリア"
+        app:showAsAction="never" />
 </menu>

@@ -133,6 +133,24 @@
         </intent>
     </Preference>
 
+    <Preference
+        android:key="keyboard_customizer_tablet"
+        android:summary="Tabletキーボードのキー配列をカスタマイズします"
+        android:title="Tabletキー配列のカスタマイズ"
+        >
+        <intent
+            android:targetClass="io.github.kachaya.skk.keyboard.KeyboardCustomizerActivity"
+            android:targetPackage="io.github.kachaya.skk"
+            >
+            <extra android:name="pref_key"
+                android:value="custom_tablet_layout"
+                />
+            <extra android:name="title"
+                android:value="Tablet配列のカスタマイズ"
+                />
+        </intent>
+    </Preference>
+
     <ListPreference
         android:defaultValue="right"
         android:entries="@array/stroke_aligns"
@@ -175,11 +193,22 @@
         android:title="候補の最後で辞書登録する"
         />
     <Preference
-        android:summary="ユーザー辞書の登録・編集を行います"
+        android:key="user_dictionary_tool"
+        android:summary="学習された単語の一覧表示・編集・削除を行います"
         android:title="@string/title_dictionary_tool"
         >
         <intent
             android:targetClass="io.github.kachaya.skk.DictionaryTool"
+            android:targetPackage="io.github.kachaya.skk"
+            />
+    </Preference>
+    <Preference
+        android:key="imported_dictionary_tool"
+        android:summary="SKK-JISYO.L 等の外部辞書のダウンロード・インポート・クリアを行います"
+        android:title="@string/title_imported_dictionary_tool"
+        >
+        <intent
+            android:targetClass="io.github.kachaya.skk.DictionaryImportActivity"
             android:targetPackage="io.github.kachaya.skk"
             />
     </Preference>

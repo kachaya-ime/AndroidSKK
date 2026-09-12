@@ -1,4 +1,26 @@
 [
-  [{"label":"~"},{"label":"{"},{"label":"}"},{"label":"<"},{"label":">"},{"label":"["},{"label":"]"},{"label":","},{"label":"."},{"label":"-"}],
-  [{"label":"`"},{"label":"^"},{"label":"|"},{"label":"\\"},{"label":"%"},{"label":"&"},{"label":"$"},{"label":"¥"},{"label":";"},{"label":"="}]
+  [
+    { "label": "~" },
+    { "label": "{" },
+    { "label": "}" },
+    { "label": "<" },
+    { "label": ">" },
+    { "label": "[" },
+    { "label": "]" },
+    { "label": "," },
+    { "label": "." },
+    { "label": "-" }
+  ],
+  [
+    { "label": "`" },
+    { "label": "^" },
+    { "label": "|" },
+    { "label": "\\" },
+    { "label": "%" },
+    { "label": "&" },
+    { "label": "$" },
+    { "label": "¥" },
+    { "label": ";" },
+    { "label": "=" }
+  ]
 ]

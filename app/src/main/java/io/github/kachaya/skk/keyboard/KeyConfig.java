@@ -139,55 +139,6 @@ public class KeyConfig {
         }
     }
 
-    // --- QWERTY Layout Defaults ---
-
-    // Default layouts are now loaded from assets via DefaultLayouts class.
-    public static final String DEFAULT_QWERTY_NORMAL = null;
-    public static final String DEFAULT_QWERTY_SHIFT = null;
-    public static final String DEFAULT_QWERTY_SYMBOL = null;
-    public static final String DEFAULT_SYMBOLS_LAYOUT = null;
-
-    /** パレット用：特殊キー */
-    public static final List<KeyConfig> PALETTE_SPECIAL_KEYS = new ArrayList<KeyConfig>() {{
-        add(new KeyConfig(CODE_SPACE));
-        add(new KeyConfig(CODE_ENTER));
-        add(new KeyConfig(CODE_BACKSPACE));
-        add(new KeyConfig(CODE_SHIFT));
-        add(new KeyConfig(CODE_CTRL));
-        add(new KeyConfig(CODE_TAB));
-        add(new KeyConfig(CODE_LEFT));
-        add(new KeyConfig(CODE_UP));
-        add(new KeyConfig(CODE_DOWN));
-        add(new KeyConfig(CODE_RIGHT));
-        add(new KeyConfig(CODE_SYM));
-        add(new KeyConfig(CODE_GAP));
-    }};
-
-    /** パレット用：英数字 */
-    public static final List<KeyConfig> PALETTE_ALPHA_KEYS = new ArrayList<KeyConfig>() {{
-        String alpha = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
-        for (char c : alpha.toCharArray()) {
-            add(new KeyConfig(String.valueOf(c)));
-        }
-    }};
-
-    /** パレット用：記号（QWERTYカスタマイズ用。数字を含む標準的なセット） */
-    public static final List<KeyConfig> PALETTE_SYMBOL_KEYS = new ArrayList<KeyConfig>() {{
-        String symbols = "0123456789!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~¥";
-        for (char c : symbols.toCharArray()) {
-            add(new KeyConfig(String.valueOf(c)));
-        }
-    }};
-
-    /** パレット用：記号バー専用（物理キーボードにない記号を補完するための最小限の ASCII セット） */
-    public static final List<KeyConfig> PALETTE_SYMBOL_BAR_KEYS = new ArrayList<KeyConfig>() {{
-        // 基本的な記号 (ASCII文字)
-        String basic = "!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~¥";
-        for (char c : basic.toCharArray()) {
-            add(new KeyConfig(String.valueOf(c)));
-        }
-    }};
-
     public String label;
     public float weight;
     public int code;

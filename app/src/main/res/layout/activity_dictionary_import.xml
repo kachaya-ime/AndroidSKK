@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:fitsSystemWindows="true"
+    android:padding="20dp"
+    tools:context=".DictionaryImportActivity">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical">
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="外部SKK辞書の管理"
+            android:textAppearance="?android:attr/textAppearanceMedium"
+            android:textStyle="bold"
+            android:layout_marginBottom="8dp" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Web から定番辞書（SKK-JISYO.L 等）をダウンロードしてインポートできます。インポートした辞書はユーザーの日常の学習辞書とは分離して独立管理されます。"
+            android:textColor="?android:attr/textColorSecondary"
+            android:layout_marginBottom="24dp" />
+
+        <Button
+            android:id="@+id/btn_download_skk"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="12dp"
+            android:text="定番SKK辞書をダウンロード (Web)" />
+
+        <Button
+            android:id="@+id/btn_import_skk"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="24dp"
+            android:text="ローカルファイルからインポート" />
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:background="?android:attr/listDivider"
+            android:layout_marginBottom="24dp" />
+
+        <Button
+            android:id="@+id/btn_clear_imported"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="インポート辞書をクリア"
+            style="?android:attr/buttonBarButtonStyle"
+            android:textColor="@android:color/holo_red_light" />
+
+    </LinearLayout>
+</ScrollView>

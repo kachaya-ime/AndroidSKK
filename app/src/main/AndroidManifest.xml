@@ -16,6 +16,11 @@
             android:label="@string/title_dictionary_tool">
         </activity>
         <activity
+            android:name=".DictionaryImportActivity"
+            android:exported="false"
+            android:label="@string/title_imported_dictionary_tool">
+        </activity>
+        <activity
             android:name=".SettingsActivity"
             android:exported="true"
             android:label="@string/title_activity_settings">

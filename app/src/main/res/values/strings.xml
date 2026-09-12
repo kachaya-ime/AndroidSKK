@@ -1,5 +1,6 @@
 <resources>
     <string name="app_name">AndroidSKK for PKB</string>
     <string name="title_activity_settings">AndroidSKK for PKB の設定</string>
-    <string name="title_dictionary_tool">SKK辞書ツール</string>
+    <string name="title_dictionary_tool">ユーザー学習辞書ツール</string>
+    <string name="title_imported_dictionary_tool">外部SKK辞書ツール</string>
 </resources>

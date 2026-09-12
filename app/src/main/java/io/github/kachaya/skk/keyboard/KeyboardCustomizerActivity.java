@@ -19,6 +19,7 @@ import android.widget.Toast;
 
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
+import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.preference.PreferenceManager;
 
@@ -63,6 +64,8 @@ public class KeyboardCustomizerActivity extends AppCompatActivity {
             DEFAULT_LAYOUTS.put("custom_qwerty_layout_normal", DefaultLayouts.get(this, "custom_qwerty_layout_normal"));
             DEFAULT_LAYOUTS.put("custom_qwerty_layout_shift", DefaultLayouts.get(this, "custom_qwerty_layout_shift"));
             DEFAULT_LAYOUTS.put("custom_qwerty_layout_symbol", DefaultLayouts.get(this, "custom_qwerty_layout_symbol"));
+            DEFAULT_LAYOUTS.put("custom_tablet_layout_normal", DefaultLayouts.get(this, "custom_tablet_layout_normal"));
+            DEFAULT_LAYOUTS.put("custom_tablet_layout_shift", DefaultLayouts.get(this, "custom_tablet_layout_shift"));
             DEFAULT_LAYOUTS.put("combined_symbols", DefaultLayouts.get(this, "combined_symbols"));
         }
     }
@@ -138,10 +141,10 @@ public class KeyboardCustomizerActivity extends AppCompatActivity {
         });
 
         RadioGroup modeSelector = findViewById(R.id.mode_selector);
-        boolean isSymbolBar = "combined_symbols".equals(mTargetPrefKey);
-
-        if (isSymbolBar) {
+        if (LayoutManager.isSymbolBar(mTargetPrefKey)) {
             modeSelector.setVisibility(View.GONE);
+        } else if (!LayoutManager.hasSymbolMode(mTargetPrefKey)) {
+            findViewById(R.id.radio_symbol).setVisibility(View.GONE);
         }
 
         modeSelector.setOnCheckedChangeListener((group, checkedId) -> {
@@ -198,7 +201,7 @@ public class KeyboardCustomizerActivity extends AppCompatActivity {
             return true;
         } else if (id == R.id.action_backup) {
             String fileName = "combined_symbols".equals(mTargetPrefKey) ?
-                    "skk_symbol_layout.json" : "skk_qwerty_layout.json";
+                    "skk_symbol_layout.json" : ("custom_tablet_layout".equals(mTargetPrefKey) ? "skk_tablet_layout.json" : "skk_qwerty_layout.json");
             mBackupLauncher.launch(fileName);
             return true;
         } else if (id == R.id.action_restore) {
@@ -567,24 +570,25 @@ public class KeyboardCustomizerActivity extends AppCompatActivity {
         mPaletteAlpha.removeAllViews();
         mPaletteOther.removeAllViews();
 
-        boolean isSymbolBar = "combined_symbols".equals(mTargetPrefKey);
-
-        if (!isSymbolBar) {
+        if (!LayoutManager.isSymbolBar(mTargetPrefKey)) {
             mPaletteTabs.setVisibility(View.VISIBLE);
-            for (KeyConfig config : KeyConfig.PALETTE_SPECIAL_KEYS) {
+            List<KeyConfig> specialKeys = LayoutManager.getSpecialKeysPalette(mTargetPrefKey);
+            for (KeyConfig config : specialKeys) {
                 mPaletteSpecial.addView(createKeyView(config, false));
             }
-            fillPaletteDummies(mPaletteSpecial, KeyConfig.PALETTE_SPECIAL_KEYS.size());
+            fillPaletteDummies(mPaletteSpecial, specialKeys.size());
 
-            for (KeyConfig config : KeyConfig.PALETTE_ALPHA_KEYS) {
+            List<KeyConfig> alphaKeys = LayoutManager.getAlphaKeysPalette(mTargetPrefKey);
+            for (KeyConfig config : alphaKeys) {
                 mPaletteAlpha.addView(createKeyView(config, false));
             }
-            fillPaletteDummies(mPaletteAlpha, KeyConfig.PALETTE_ALPHA_KEYS.size());
+            fillPaletteDummies(mPaletteAlpha, alphaKeys.size());
 
-            for (KeyConfig config : KeyConfig.PALETTE_SYMBOL_KEYS) {
+            List<KeyConfig> symbolKeys = LayoutManager.getSymbolKeysPalette(mTargetPrefKey);
+            for (KeyConfig config : symbolKeys) {
                 mPaletteOther.addView(createKeyView(config, false));
             }
-            fillPaletteDummies(mPaletteOther, KeyConfig.PALETTE_SYMBOL_KEYS.size());
+            fillPaletteDummies(mPaletteOther, symbolKeys.size());
 
             updatePaletteVisibility(mPaletteTabs.getSelectedTabPosition());
         } else {
@@ -593,10 +597,11 @@ public class KeyboardCustomizerActivity extends AppCompatActivity {
             mPaletteAlpha.setVisibility(View.GONE);
             mPaletteOther.setVisibility(View.VISIBLE); // 記号バー編集時は常に記号パレットを表示
 
-            for (KeyConfig config : KeyConfig.PALETTE_SYMBOL_BAR_KEYS) {
+            List<KeyConfig> symbolBarKeys = LayoutManager.getSymbolKeysPalette(mTargetPrefKey);
+            for (KeyConfig config : symbolBarKeys) {
                 mPaletteOther.addView(createKeyView(config, false));
             }
-            fillPaletteDummies(mPaletteOther, KeyConfig.PALETTE_SYMBOL_BAR_KEYS.size());
+            fillPaletteDummies(mPaletteOther, symbolBarKeys.size());
         }
     }
 
@@ -656,7 +661,7 @@ public class KeyboardCustomizerActivity extends AppCompatActivity {
      * </p>
      */
     private void saveLayout() {
-        if ("combined_symbols".equals(mTargetPrefKey)) {
+        if (LayoutManager.isSymbolBar(mTargetPrefKey)) {
             LayoutManager.saveLayout(this, "custom_symbols_layout", serializeLayout());
         } else {
             // 現在の編集内容をバッファに反映
@@ -665,7 +670,9 @@ public class KeyboardCustomizerActivity extends AppCompatActivity {
             // 全モード（通常・シフト・記号）を一括で保存
             LayoutManager.saveLayout(this, mTargetPrefKey + "_normal", mLayoutBuffers.get(EditMode.NORMAL));
             LayoutManager.saveLayout(this, mTargetPrefKey + "_shift", mLayoutBuffers.get(EditMode.SHIFT));
-            LayoutManager.saveLayout(this, mTargetPrefKey + "_symbol", mLayoutBuffers.get(EditMode.SYMBOL));
+            if (LayoutManager.hasSymbolMode(mTargetPrefKey)) {
+                LayoutManager.saveLayout(this, mTargetPrefKey + "_symbol", mLayoutBuffers.get(EditMode.SYMBOL));
+            }
         }
 
         // 変更を通知するために SharedPreferences を更新
@@ -698,20 +705,39 @@ public class KeyboardCustomizerActivity extends AppCompatActivity {
     }
 
     private void resetToDefault() {
-        if ("combined_symbols".equals(mTargetPrefKey)) {
-            String defaultSym = DEFAULT_LAYOUTS.get("combined_symbols");
-            mLayoutBuffers.put(EditMode.NORMAL, defaultSym);
-            renderKeyboard(defaultSym);
-        } else {
-            // 全モードをデフォルト値にリセット
-            mLayoutBuffers.put(EditMode.NORMAL, DEFAULT_LAYOUTS.get(mTargetPrefKey + "_normal"));
-            mLayoutBuffers.put(EditMode.SHIFT, DEFAULT_LAYOUTS.get(mTargetPrefKey + "_shift"));
-            mLayoutBuffers.put(EditMode.SYMBOL, DEFAULT_LAYOUTS.get(mTargetPrefKey + "_symbol"));
-            // 現在表示中のモードのレイアウトを再描画
-            renderKeyboard(mLayoutBuffers.get(mEditMode));
-        }
-        updateUsedChars();
-        setupPalette();
+        new AlertDialog.Builder(this)
+                .setTitle("レイアウトの初期化")
+                .setMessage("このキーボードレイアウトの配置を初期状態に戻しますか？")
+                .setPositiveButton("初期化", (dialog, which) -> {
+                    // 対象レイアウトの保存済みカスタムファイルを削除
+                    LayoutManager.clearLayout(this, mTargetPrefKey);
+
+                    if (LayoutManager.isSymbolBar(mTargetPrefKey)) {
+                        String defaultSym = DEFAULT_LAYOUTS.get("combined_symbols");
+                        mLayoutBuffers.put(EditMode.NORMAL, defaultSym);
+                        renderKeyboard(defaultSym);
+                    } else {
+                        // 対象レイアウトの全モードをデフォルト値にリセット
+                        mLayoutBuffers.put(EditMode.NORMAL, DEFAULT_LAYOUTS.get(mTargetPrefKey + "_normal"));
+                        mLayoutBuffers.put(EditMode.SHIFT, DEFAULT_LAYOUTS.get(mTargetPrefKey + "_shift"));
+                        if (LayoutManager.hasSymbolMode(mTargetPrefKey)) {
+                            mLayoutBuffers.put(EditMode.SYMBOL, DEFAULT_LAYOUTS.get(mTargetPrefKey + "_symbol"));
+                        }
+                        // 現在表示中のモードのレイアウトを再描画
+                        renderKeyboard(mLayoutBuffers.get(mEditMode));
+                    }
+                    updateUsedChars();
+                    setupPalette();
+
+                    // IME 本体へ変更を通知
+                    PreferenceManager.getDefaultSharedPreferences(this).edit()
+                            .putLong(LayoutManager.PREF_LAYOUT_UPDATED, System.currentTimeMillis())
+                            .apply();
+
+                    Toast.makeText(this, "レイアウトを初期化しました", Toast.LENGTH_SHORT).show();
+                })
+                .setNegativeButton("キャンセル", null)
+                .show();
     }
 
     private void backupLayout(Uri uri) {
@@ -719,13 +745,15 @@ public class KeyboardCustomizerActivity extends AppCompatActivity {
         try (OutputStream os = getContentResolver().openOutputStream(uri, "wt")) {
             if (os == null) return;
             Map<String, KeyConfig[][]> layouts = new LinkedHashMap<>();
-            if ("combined_symbols".equals(mTargetPrefKey)) {
+            if (LayoutManager.isSymbolBar(mTargetPrefKey)) {
                 layouts.put("custom_symbols_layout", KeyConfig.layoutFromAnyString(serializeLayout()));
             } else {
                 mLayoutBuffers.put(mEditMode, serializeLayout());
                 layouts.put(mTargetPrefKey + "_normal", KeyConfig.layoutFromAnyString(mLayoutBuffers.get(EditMode.NORMAL)));
                 layouts.put(mTargetPrefKey + "_shift", KeyConfig.layoutFromAnyString(mLayoutBuffers.get(EditMode.SHIFT)));
-                layouts.put(mTargetPrefKey + "_symbol", KeyConfig.layoutFromAnyString(mLayoutBuffers.get(EditMode.SYMBOL)));
+                if (LayoutManager.hasSymbolMode(mTargetPrefKey)) {
+                    layouts.put(mTargetPrefKey + "_symbol", KeyConfig.layoutFromAnyString(mLayoutBuffers.get(EditMode.SYMBOL)));
+                }
             }
             String jsonString = KeyConfig.backupToJsonString(layouts);
             os.write(jsonString.getBytes(StandardCharsets.UTF_8));

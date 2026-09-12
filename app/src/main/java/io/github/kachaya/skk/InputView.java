@@ -32,6 +32,7 @@ import io.github.kachaya.skk.keyboard.LayoutManager;
 import io.github.kachaya.skk.keyboard.QwertyKeyboardView;
 import io.github.kachaya.skk.keyboard.StrokeKeyboardView;
 import io.github.kachaya.skk.keyboard.SymbolKeyboardView;
+import io.github.kachaya.skk.keyboard.TabletKeyboardView;
 
 /**
  * SKK の入力ビュー（キーボード UI）を管理するクラスです。
@@ -261,7 +262,7 @@ public class InputView extends LinearLayout {
         } else if ("symbols".equals(type)) {
             mRowCount = 1;
         } else {
-            String baseKey = "custom_qwerty_layout";
+            String baseKey = "tablet".equals(type) ? "custom_tablet_layout" : "custom_qwerty_layout";
             String layoutStr = LayoutManager.loadLayout(getContext(), baseKey + "_normal", DefaultLayouts.get(getContext(), baseKey + "_normal"));
             KeyConfig[][] layout = KeyConfig.layoutFromAnyString(layoutStr);
             mRowCount = Math.max(1, layout.length);
@@ -333,6 +334,12 @@ public class InputView extends LinearLayout {
         int height = LayoutParams.WRAP_CONTENT;
 
         switch (mKeyboardType) {
+            case "tablet":
+                TabletKeyboardView tv = new TabletKeyboardView(getContext());
+                tv.setRowHeight(mAdjustedButtonHeight);
+                tv.setOnKeyActionListener(this::onClickKey);
+                mCurrentKeyboardView = tv;
+                break;
             case "qwerty":
                 QwertyKeyboardView qv = new QwertyKeyboardView(getContext());
                 qv.setRowHeight(mAdjustedButtonHeight);

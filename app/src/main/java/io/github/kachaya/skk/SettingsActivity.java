@@ -108,6 +108,7 @@ public class SettingsActivity extends AppCompatActivity {
             SwitchPreference inputSingleLinePref = findPreference("input_single_line");
             Preference symbolsCustomizerPref = findPreference("symbols_customizer");
             Preference qwertyCustomizerPref = findPreference("keyboard_customizer_qwerty");
+            Preference tabletCustomizerPref = findPreference("keyboard_customizer_tablet");
             Preference strokeAlignPref = findPreference("stroke_align");
             Preference strokeWidthPref = findPreference("stroke_width_scale");
             Preference keyboardHeightPref = findPreference("keyboard_height_scale");
@@ -117,6 +118,7 @@ public class SettingsActivity extends AppCompatActivity {
                 String currentType = keyboardTypePref.getValue();
                 boolean isSymbols = "symbols".equals(currentType);
                 boolean isQwerty = "qwerty".equals(currentType);
+                boolean isTablet = "tablet".equals(currentType);
                 boolean isStroke = "stroke".equals(currentType);
 
                 if (inputSingleLinePref != null) {
@@ -127,6 +129,9 @@ public class SettingsActivity extends AppCompatActivity {
                 }
                 if (qwertyCustomizerPref != null) {
                     qwertyCustomizerPref.setEnabled(isQwerty);
+                }
+                if (tabletCustomizerPref != null) {
+                    tabletCustomizerPref.setEnabled(isTablet);
                 }
                 if (strokeAlignPref != null) {
                     strokeAlignPref.setEnabled(isStroke);
@@ -142,6 +147,7 @@ public class SettingsActivity extends AppCompatActivity {
                     String newType = (String) newValue;
                     boolean isSymbolsNew = "symbols".equals(newType);
                     boolean isQwertyNew = "qwerty".equals(newType);
+                    boolean isTabletNew = "tablet".equals(newType);
                     boolean isStrokeNew = "stroke".equals(newType);
 
                     if (inputSingleLinePref != null) {
@@ -155,6 +161,9 @@ public class SettingsActivity extends AppCompatActivity {
                     }
                     if (qwertyCustomizerPref != null) {
                         qwertyCustomizerPref.setEnabled(isQwertyNew);
+                    }
+                    if (tabletCustomizerPref != null) {
+                        tabletCustomizerPref.setEnabled(isTabletNew);
                     }
                     if (strokeAlignPref != null) {
                         strokeAlignPref.setEnabled(isStrokeNew);

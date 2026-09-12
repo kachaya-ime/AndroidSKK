@@ -26,6 +26,10 @@ public class DefaultLayouts {
                 return AssetLoader.loadAssetString(context, "layouts/qwerty_shift.json");
             case "custom_qwerty_layout_symbol":
                 return AssetLoader.loadAssetString(context, "layouts/qwerty_symbol.json");
+            case "custom_tablet_layout_normal":
+                return AssetLoader.loadAssetString(context, "layouts/tablet_normal.json");
+            case "custom_tablet_layout_shift":
+                return AssetLoader.loadAssetString(context, "layouts/tablet_shift.json");
             case "combined_symbols":
             case "custom_symbols_layout":
                 return AssetLoader.loadAssetString(context, "layouts/combined_symbols.json");

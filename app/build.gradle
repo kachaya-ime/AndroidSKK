@@ -10,8 +10,8 @@ android {
         applicationId "io.github.kachaya.skk"
         minSdk 28
         targetSdk 36
-        versionCode 20100
-        versionName "2.1.0"
+        versionCode 20200
+        versionName "2.2.0"
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -53,6 +53,7 @@ android {
 
 dependencies {
     implementation files('libs/jdbm-1.0.jar')
+    implementation libs.sudachi
     implementation libs.appcompat
     implementation libs.material
     implementation libs.preference

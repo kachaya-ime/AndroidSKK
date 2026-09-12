@@ -1,0 +1,71 @@
+[
+  [
+    { "label": "~" },
+    { "label": "!" },
+    { "label": "@" },
+    { "label": "#" },
+    { "label": "$" },
+    { "label": "%" },
+    { "label": "^" },
+    { "label": "&" },
+    { "label": "*" },
+    { "label": "(" },
+    { "label": ")" },
+    { "label": "_" },
+    { "label": "+" },
+    { "label": "⌫", "code": "BACKSPACE", "weight": 1.5 }
+  ],
+  [
+    { "label": "Tab", "code": "TAB", "weight": 1.5 },
+    { "label": "Q" },
+    { "label": "W" },
+    { "label": "E" },
+    { "label": "R" },
+    { "label": "T" },
+    { "label": "Y" },
+    { "label": "U" },
+    { "label": "I" },
+    { "label": "O" },
+    { "label": "P" },
+    { "label": "{" },
+    { "label": "}" },
+    { "label": "|" }
+  ],
+  [
+    { "label": "Ctrl", "code": "CTRL", "weight": 1.75 },
+    { "label": "A" },
+    { "label": "S" },
+    { "label": "D" },
+    { "label": "F" },
+    { "label": "G" },
+    { "label": "H" },
+    { "label": "J" },
+    { "label": "K" },
+    { "label": "L" },
+    { "label": ":" },
+    { "label": "\"" },
+    { "label": "⏎", "code": "ENTER", "weight": 1.75 }
+  ],
+  [
+    { "label": "⇧", "code": "SHIFT", "weight": 2.0 },
+    { "label": "Z" },
+    { "label": "X" },
+    { "label": "C" },
+    { "label": "V" },
+    { "label": "B" },
+    { "label": "N" },
+    { "label": "M" },
+    { "label": "<" },
+    { "label": ">" },
+    { "label": "?" },
+    { "label": "▴", "code": "UP", "weight": 1.25 },
+    { "label": "⇧", "code": "SHIFT", "weight": 1.25 }
+  ],
+  [
+    { "label": "Ctrl", "code": "CTRL", "weight": 2.25 },
+    { "label": "⌴", "code": "SPACE", "weight": 8.5 },
+    { "label": "◂", "code": "LEFT", "weight": 1.25 },
+    { "label": "▾", "code": "DOWN", "weight": 1.25 },
+    { "label": "▸", "code": "RIGHT", "weight": 1.25 }
+  ]
+]
