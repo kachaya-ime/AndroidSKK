@@ -1,7 +1,5 @@
 package io.github.kachaya.skk.engine;
 
-import android.view.KeyEvent;
-
 /**
  * Abbrev モードの見出し語入力状態（▽）を管理するクラスです。
  * <p>
@@ -101,26 +99,28 @@ public enum SKKStateAbbrev implements SKKState {
      * Abbrev 入力中は、モード側によるカーソル移動をブロックします。
      *
      * @param context SKKエンジンのコンテキスト
-     * @param keyCode キーコード
+     * @param action  割り当てられている CtrlAction
      * @return イベントを消費した場合は true
      */
     @Override
-    public boolean processCtrlKey(SKKEngine context, int keyCode) {
-        switch (keyCode) {
-            case KeyEvent.KEYCODE_J:
+    public boolean processCtrlKey(SKKEngine context, CtrlAction action) {
+        switch (action) {
+            case KANA_KEY:
                 context.handleKanaKey();
                 return true;
-            case KeyEvent.KEYCODE_Q:
-                // Abbrev モードでの Ctrl-Q は全角英数として確定
+            case TOGGLE_KANA:
+                // DDSKK 仕様 6.3.2: Abbrev モードでの Ctrl-Q (TOGGLE_KANA) は、
+                // ▽マークから C-q 打鍵位置までのアルファベットを全角アルファベットに変換して確定
                 StringBuilder headword = context.getHeadword();
                 int len = headword.length();
                 if (len > 0) {
                     CharSequence text = RomajiConverter.toWideLatin(headword);
                     context.commitTextSKK(text, 1);
                 }
+                context.reset();
                 context.changeState(SKKStateDirect.INSTANCE);
                 return true;
-            case KeyEvent.KEYCODE_I:
+            case COMPLETION:
                 // 明示的な補完開始
                 if (context.getSuggestionList() == null || context.getSuggestionList().isEmpty()) {
                     context.updateSuggestions();
@@ -128,16 +128,38 @@ public enum SKKStateAbbrev implements SKKState {
                     context.chooseAdjacentSuggestion(true);
                 }
                 return true;
-            case KeyEvent.KEYCODE_G:
+            case CANCEL:
                 // キャンセル（SKKState のデフォルト処理を統合）
                 return handleCancel(context);
-
-            // カーソル移動のガード: Abbrev 入力中はエディタのカーソル移動を抑制する
-            case KeyEvent.KEYCODE_P:
-            case KeyEvent.KEYCODE_N:
-            case KeyEvent.KEYCODE_B:
-            case KeyEvent.KEYCODE_F:
+            case TOGGLE_EN_JP:
+                context.toggleEnglishJapanese();
                 return true;
+            case DELETE_CHAR:
+                context.handleBackspace();
+                return true;
+            case KILL_LINE_BACKWARD:
+                return context.killHeadwordToLineStart();
+            case KILL_WORD_BACKWARD:
+                return context.killWordHeadwordBackward();
+            case LAUNCH_SETTINGS:
+                context.launchSettings();
+                return true;
+            case OPEN_EMOJI:
+                context.openEmojiPicker();
+                return true;
+
+            // カーソル移動・編集のガード: Abbrev 入力中はエディタの移動や削除を抑制する
+            case CURSOR_UP:
+            case CURSOR_DOWN:
+            case CURSOR_LEFT:
+            case CURSOR_RIGHT:
+            case FORWARD_DELETE:
+            case LINE_START:
+            case LINE_END:
+            case KILL_LINE:
+                return true;
+            default:
+                break;
         }
         return false;
     }

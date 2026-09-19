@@ -1,12 +1,20 @@
 <?xml version="1.0" encoding="utf-8"?>
-<TextView xmlns:android="http://schemas.android.com/apk/res/android"
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools"
-    android:layout_width="wrap_content"
+    android:id="@+id/tooltip_scroll"
+    android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:background="@drawable/tooltip_background"
-    android:paddingHorizontal="8dp"
-    android:paddingVertical="4dp"
-    android:textColor="@color/tooltip_fg"
-    android:textSize="16dp"
-    tools:ignore="SpUsage"
-    />
+    android:scrollbars="vertical"
+    android:fadeScrollbars="false">
+
+    <TextView
+        android:id="@+id/tooltip_text"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:paddingHorizontal="8dp"
+        android:paddingVertical="4dp"
+        android:textColor="@color/tooltip_fg"
+        android:textSize="16dp"
+        tools:ignore="SpUsage" />
+</ScrollView>

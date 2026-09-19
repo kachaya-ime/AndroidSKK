@@ -5,6 +5,7 @@ import android.util.TypedValue;
 import android.view.ContextThemeWrapper;
 import android.widget.Button;
 
+import io.github.kachaya.skk.InputService;
 import io.github.kachaya.skk.R;
 
 /**
@@ -24,13 +25,14 @@ public class KeyViewFactory {
      * @return スタイルが適用された Button インスタンス
      */
     public static Button createKeyButton(Context context, KeyConfig config) {
+        Context themedContext = InputService.getThemedContext(context);
         // 機能キー（コードあり）か文字キーかでスタイルと背景を切り替える
         boolean isFunctional = (config.code != KeyConfig.CODE_NONE);
         int style = isFunctional ? R.style.FunctionalKeyButton : R.style.CharacterButton;
         int bgRes = isFunctional ? R.drawable.bg_function_button_selector : R.drawable.bg_character_button_selector;
 
         // ContextThemeWrapper を使用してスタイルを適用した Button を生成
-        Button b = new Button(new ContextThemeWrapper(context, style), null, 0);
+        Button b = new Button(new ContextThemeWrapper(themedContext, style), null, 0);
         b.setText(config.label);
         b.setTag(config);
         b.setAllCaps(false);

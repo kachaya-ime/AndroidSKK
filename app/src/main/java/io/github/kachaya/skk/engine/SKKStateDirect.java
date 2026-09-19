@@ -90,32 +90,67 @@ public enum SKKStateDirect implements SKKState {
      * および単語登録中のカーソル移動ブロックなどを処理します。
      *
      * @param context SKKエンジンのコンテキスト
-     * @param keyCode KeyEventで定義されているキーコード
+     * @param action  割り当てられている CtrlAction
      * @return イベントを消費した場合は true
      */
     @Override
-    public boolean processCtrlKey(SKKEngine context, int keyCode) {
-        switch (keyCode) {
-            case KeyEvent.KEYCODE_U:
+    public boolean processCtrlKey(SKKEngine context, CtrlAction action) {
+        switch (action) {
+            case RE_CONVERSION:
                 return context.reConversion();
-            case KeyEvent.KEYCODE_J:
+            case CONVERT_PREV_WORD:
+                return context.convertTextBeforeCursor();
+            case CONVERT_NEXT_WORD:
+                return context.convertTextAfterCursor();
+            case KANA_KEY:
                 context.handleKanaKey();
                 return true;
-            case KeyEvent.KEYCODE_G:
+            case CANCEL:
                 return context.handleCancel();
-            case KeyEvent.KEYCODE_Q:
+            case TOGGLE_KANA:
                 context.toggleKana();
+                return true;
+            case TOGGLE_EN_JP:
+                context.toggleEnglishJapanese();
+                return true;
+            case FORWARD_DELETE:
+                context.sendDownUpKeyEvents(KeyEvent.KEYCODE_FORWARD_DEL);
+                return true;
+            case DELETE_CHAR:
+                if (!context.handleBackspace()) {
+                    context.sendDownUpKeyEvents(KeyEvent.KEYCODE_DEL);
+                }
+                return true;
+            case LINE_START:
+                context.sendDownUpKeyEvents(KeyEvent.KEYCODE_MOVE_HOME);
+                return true;
+            case LINE_END:
+                context.sendDownUpKeyEvents(KeyEvent.KEYCODE_MOVE_END);
+                return true;
+            case KILL_LINE:
+                return context.handleKillLine();
+            case KILL_LINE_BACKWARD:
+                return context.handleKillLineBackward();
+            case KILL_WORD_BACKWARD:
+                return context.handleKillWordBackward();
+            case LAUNCH_SETTINGS:
+                context.launchSettings();
+                return true;
+            case OPEN_EMOJI:
+                context.openEmojiPicker();
                 return true;
 
             // カーソル移動のガード
-            case KeyEvent.KEYCODE_P:
-            case KeyEvent.KEYCODE_N:
-            case KeyEvent.KEYCODE_B:
-            case KeyEvent.KEYCODE_F:
+            case CURSOR_UP:
+            case CURSOR_DOWN:
+            case CURSOR_LEFT:
+            case CURSOR_RIGHT:
                 // 単語登録中はモード側に処理を流さず、カーソル移動をブロックする
                 if (!context.isRegistrationStackEmpty()) {
                     return true;
                 }
+                break;
+            default:
                 break;
         }
         return false;
@@ -217,7 +252,11 @@ public enum SKKStateDirect implements SKKState {
 
         switch (text) {
             case "q":
-                toggleKana(context);
+                if (isUpper) {
+                    context.changeState(SKKStateHeadword.INSTANCE);
+                } else {
+                    toggleKana(context);
+                }
                 return true;
             case "l":
                 if (isUpper) {

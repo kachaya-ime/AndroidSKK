@@ -137,7 +137,19 @@ public class SkkDictBuilder {
             Map<String, Integer> surfaceCostMap = entry.getValue();
 
             List<Map.Entry<String, Integer>> candidateList = new ArrayList<>(surfaceCostMap.entrySet());
-            candidateList.sort(Map.Entry.<String, Integer>comparingByValue().thenComparing(Map.Entry::getKey));
+            if (reading.startsWith("#")) {
+                String counterSurface = extractCounterSurface(candidateList);
+                candidateList.sort((a, b) -> {
+                    int pA = getNumericPriority(counterSurface, a.getKey());
+                    int pB = getNumericPriority(counterSurface, b.getKey());
+                    if (pA != pB) {
+                        return Integer.compare(pA, pB);
+                    }
+                    return a.getKey().compareTo(b.getKey());
+                });
+            } else {
+                candidateList.sort(Map.Entry.<String, Integer>comparingByValue().thenComparing(Map.Entry::getKey));
+            }
 
             List<String> sortedSurfaces = new ArrayList<>();
             for (Map.Entry<String, Integer> cand : candidateList) {
@@ -146,6 +158,61 @@ public class SkkDictBuilder {
             resultMap.put(reading, sortedSurfaces);
         }
         return resultMap;
+    }
+
+    private static String extractCounterSurface(List<Map.Entry<String, Integer>> candidateList) {
+        for (Map.Entry<String, Integer> entry : candidateList) {
+            String key = entry.getKey();
+            if (key != null && key.matches("^#[0-9].*")) {
+                return key.substring(2);
+            }
+        }
+        return "";
+    }
+
+    private static int getNumericPriority(String surface, String candidateKey) {
+        if (candidateKey == null || !candidateKey.startsWith("#") || candidateKey.length() < 2) {
+            return 99;
+        }
+        char typeChar = candidateKey.charAt(1);
+
+        boolean isKatakanaOrLatin = (surface != null && (DictUtil.isKatakanaOnly(surface) || surface.matches("^[a-zA-Z]+$")));
+        boolean isDateOrCurrency = (surface != null && (surface.contains("年") || surface.contains("月") || surface.contains("日") || surface.contains("円") || surface.contains("時") || surface.contains("分") || surface.contains("秒")));
+
+        if (isKatakanaOrLatin) {
+            // Katakana / Latin units (e.g. ページ, kg, ドル): Arabic numerals first, then mixed, then kanji
+            switch (typeChar) {
+                case '0': return 0; // 半角
+                case '1': return 1; // 全角
+                case '5': return 2; // 混合
+                case '2': return 3; // 漢数字
+                case '3': return 4; // 位取り
+                case '4': return 5; // 旧字体
+                default:  return 6;
+            }
+        } else if (isDateOrCurrency) {
+            // Date / Currency (e.g. 年, 月, 日, 円): Half-width, positional kanji, simple kanji, full-width
+            switch (typeChar) {
+                case '0': return 0; // 半角
+                case '3': return 1; // 位取りあり漢数字
+                case '2': return 2; // 漢数字
+                case '1': return 3; // 全角
+                case '5': return 4; // 混合
+                case '4': return 5; // 旧字体
+                default:  return 6;
+            }
+        } else {
+            // General Kanji / Other counters (e.g. 人, 冊, 本, 個): Half-width, simple kanji, positional kanji, full-width
+            switch (typeChar) {
+                case '0': return 0; // 半角
+                case '2': return 1; // 漢数字
+                case '3': return 2; // 位取りあり漢数字
+                case '1': return 3; // 全角
+                case '5': return 4; // 混合
+                case '4': return 5; // 旧字体
+                default:  return 6;
+            }
+        }
     }
 
     public void writeSkkDict() throws IOException {

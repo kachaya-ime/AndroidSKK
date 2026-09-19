@@ -37,6 +37,7 @@ public class LayoutManager {
         add(new KeyConfig(KeyConfig.CODE_DOWN));
         add(new KeyConfig(KeyConfig.CODE_RIGHT));
         add(new KeyConfig(KeyConfig.CODE_SYM));
+        add(new KeyConfig(KeyConfig.CODE_ABC));
         add(new KeyConfig(KeyConfig.CODE_GAP));
     }};
 

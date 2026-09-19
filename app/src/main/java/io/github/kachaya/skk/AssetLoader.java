@@ -6,6 +6,9 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 
@@ -24,8 +27,39 @@ public class AssetLoader {
      * @return ファイルの内容。エラーが発生した場合は null。
      */
     public static String loadAssetString(Context context, String fileName) {
+        InputStream is = null;
+        if (context != null) {
+            try {
+                is = context.getAssets().open(fileName);
+            } catch (Exception ignored) {
+            }
+        }
+        if (is == null) {
+            ClassLoader classLoader = AssetLoader.class.getClassLoader();
+            if (classLoader != null) {
+                is = classLoader.getResourceAsStream("assets/" + fileName);
+                if (is == null) {
+                    is = classLoader.getResourceAsStream(fileName);
+                }
+            }
+        }
+        if (is == null) {
+            File file = new File("src/main/assets/" + fileName);
+            if (!file.exists()) {
+                file = new File("app/src/main/assets/" + fileName);
+            }
+            if (file.exists()) {
+                try {
+                    is = new FileInputStream(file);
+                } catch (Exception ignored) {
+                }
+            }
+        }
+        if (is == null) {
+            return null;
+        }
         try (BufferedReader reader = new BufferedReader(
-                new InputStreamReader(context.getAssets().open(fileName), StandardCharsets.UTF_8))) {
+                new InputStreamReader(is, StandardCharsets.UTF_8))) {
             StringBuilder sb = new StringBuilder();
             String line;
             while ((line = reader.readLine()) != null) {

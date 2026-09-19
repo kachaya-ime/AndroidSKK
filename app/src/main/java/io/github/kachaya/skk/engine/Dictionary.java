@@ -21,6 +21,7 @@ import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -77,6 +78,13 @@ public class Dictionary {
      */
     private void logI(String msg) {
         Log.i("Dictionary", msg);
+    }
+
+    /**
+     * テスト用のコンストラクタです。
+     */
+    protected Dictionary() {
+        mFilesDirPath = null;
     }
 
     /**
@@ -286,18 +294,11 @@ public class Dictionary {
         List<String> list1 = new ArrayList<>();
         Set<String> set1 = new HashSet<>();
 
-        // 1. システム辞書の検索
-        String[] cands1 = getCandidatesFromBTree(searchKey, mBTreeMainDict);
-        if (cands1 != null) {
-            for (String c : cands1) {
-                if (!c.isEmpty() && set1.add(c)) {
-                    list1.add(c);
-                }
-            }
-        }
-
-        // 2. インポート辞書の検索
+        // 1. インポート辞書の検索
         String[] cands2 = getCandidatesFromBTree(searchKey, mBTreeImportedDict);
+        if (cands2 == null && !searchKey.equals(searchKey.toLowerCase(Locale.ENGLISH))) {
+            cands2 = getCandidatesFromBTree(searchKey.toLowerCase(Locale.ENGLISH), mBTreeImportedDict);
+        }
         if (cands2 != null) {
             for (String c : cands2) {
                 if (!c.isEmpty() && set1.add(c)) {
@@ -306,8 +307,24 @@ public class Dictionary {
             }
         }
 
+        // 2. システム辞書の検索
+        String[] cands1 = getCandidatesFromBTree(searchKey, mBTreeMainDict);
+        if (cands1 == null && !searchKey.equals(searchKey.toLowerCase(Locale.ENGLISH))) {
+            cands1 = getCandidatesFromBTree(searchKey.toLowerCase(Locale.ENGLISH), mBTreeMainDict);
+        }
+        if (cands1 != null) {
+            for (String c : cands1) {
+                if (!c.isEmpty() && set1.add(c)) {
+                    list1.add(c);
+                }
+            }
+        }
+
         // 3. ユーザー辞書の検索
         Entry entry = getUserDictEntry(searchKey);
+        if (entry == null && !searchKey.equals(searchKey.toLowerCase(Locale.ENGLISH))) {
+            entry = getUserDictEntry(searchKey.toLowerCase(Locale.ENGLISH));
+        }
         List<String> list2 = (entry != null) ? entry.candidates : null;
         Set<String> userCandsSet = new HashSet<>();
 
@@ -336,19 +353,74 @@ public class Dictionary {
         for (String rawCand : list1) {
             String template;
             String annotation;
-            int i = rawCand.lastIndexOf(';');
-            if (i != -1) {
-                template = rawCand.substring(0, i);
-                annotation = rawCand.substring(i + 1);
+            if (rawCand != null && rawCand.startsWith("(concat \"") && rawCand.endsWith("\")")) {
+                String inner = rawCand.substring(9, rawCand.length() - 2);
+                int sepIdx = findUnescapedSemicolon(inner);
+                if (sepIdx != -1) {
+                    String innerTemplate = inner.substring(0, sepIdx);
+                    String innerAnnotation = inner.substring(sepIdx + 1);
+                    template = "(concat \"" + innerTemplate + "\")";
+                    annotation = "(concat \"" + innerAnnotation + "\")";
+                } else {
+                    template = rawCand;
+                    annotation = null;
+                }
             } else {
-                template = rawCand;
-                annotation = null;
+                int i = findAnnotationSeparator(rawCand);
+                if (i != -1) {
+                    template = rawCand.substring(0, i);
+                    annotation = rawCand.substring(i + 1);
+                } else {
+                    template = rawCand;
+                    annotation = null;
+                }
             }
             // デコードおよび数値置換処理は Candidate クラス側で行われる
             boolean isUser = userCandsSet.contains(rawCand);
             candidates.add(new Candidate(rawCand, template, annotation, nums, isUser));
         }
         return candidates;
+    }
+
+    private static int findUnescapedSemicolon(String inner) {
+        if (inner == null) return -1;
+        boolean escaped = false;
+        for (int i = 0; i < inner.length(); i++) {
+            char c = inner.charAt(i);
+            if (escaped) {
+                escaped = false;
+            } else if (c == '\\') {
+                escaped = true;
+            } else if (c == ';') {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    /**
+     * SKK 辞書の候補文字列（rawCand）から、候補本体と注釈（アノテーション）を区切る ';' のインデックスを検索します。
+     * Lisp 式 (concat ...) 内のエスケープや文字列リテラルを考慮し、最初の非保護 ';' を探します。
+     */
+    private static int findAnnotationSeparator(String rawCand) {
+        if (rawCand == null || rawCand.isEmpty()) return -1;
+        boolean inQuote = false;
+        int nest = 0;
+        for (int i = 0; i < rawCand.length(); i++) {
+            char c = rawCand.charAt(i);
+            if (c == '"') {
+                inQuote = !inQuote;
+            } else if (!inQuote) {
+                if (c == '(') {
+                    nest++;
+                } else if (c == ')') {
+                    if (nest > 0) nest--;
+                } else if (c == ';' && nest == 0) {
+                    return i;
+                }
+            }
+        }
+        return -1;
     }
 
     /**
@@ -361,9 +433,15 @@ public class Dictionary {
         Set<String> set = new LinkedHashSet<>();
         if (mBTreeMainDict != null) {
             set.addAll(findKeys(key, mBTreeMainDict));
+            if (!key.equals(key.toLowerCase(Locale.ENGLISH))) {
+                set.addAll(findKeys(key.toLowerCase(Locale.ENGLISH), mBTreeMainDict));
+            }
         }
         if (mBTreeImportedDict != null) {
             set.addAll(findKeys(key, mBTreeImportedDict));
+            if (!key.equals(key.toLowerCase(Locale.ENGLISH))) {
+                set.addAll(findKeys(key.toLowerCase(Locale.ENGLISH), mBTreeImportedDict));
+            }
         }
         List<String> list = new ArrayList<>(set);
 
@@ -390,7 +468,10 @@ public class Dictionary {
     /**
      * ユーザー辞書の全内容を削除し、データベースを初期状態にリセットします。
      */
-    public void clearUserDictionary() {
+    public synchronized void clearUserDictionary() {
+        mOldKey = null;
+        mOldValue = null;
+        if (mRecManUserDict == null) return;
         try {
             mBTreeUserDict = BTree.createInstance(mRecManUserDict, new StringComparator());
             mRecManUserDict.setNamedObject(BTREE_NAME, mBTreeUserDict.getRecid());
@@ -399,6 +480,66 @@ public class Dictionary {
         } catch (IOException e) {
             Log.e("Dictionary", "Failed to clear user dictionary", e);
             throw new RuntimeException("Failed to clear user dictionary", e);
+        }
+    }
+
+    /**
+     * ユーザー辞書のデータベースをディスクから再読み込みし、インメモリキャッシュをクリアします。
+     * 設定画面や辞書ツールで学習辞書が変更・削除された後に呼び出されます。
+     */
+    public synchronized void reloadUserDictionary() {
+        mOldKey = null;
+        mOldValue = null;
+        try {
+            if (mRecManUserDict != null) {
+                try {
+                    mRecManUserDict.close();
+                } catch (Exception ignored) {
+                }
+                mRecManUserDict = null;
+            }
+            mRecManUserDict = RecordManagerFactory.createRecordManager(mFilesDirPath + "/" + USER_DICT);
+            long recId = mRecManUserDict.getNamedObject(BTREE_NAME);
+            if (recId == 0) {
+                mBTreeUserDict = BTree.createInstance(mRecManUserDict, new StringComparator());
+                mRecManUserDict.setNamedObject(BTREE_NAME, mBTreeUserDict.getRecid());
+                mRecManUserDict.commit();
+            } else {
+                mBTreeUserDict = BTree.load(mRecManUserDict, recId);
+            }
+        } catch (IOException e) {
+            Log.e("Dictionary", "Failed to reload user dictionary: " + e.getMessage());
+            mRecManUserDict = null;
+            mBTreeUserDict = null;
+        }
+    }
+
+    /**
+     * インポート辞書のデータベースをディスクから再読み込みします。
+     * 外部辞書の追加やクリアが行われた後に呼び出されます。
+     */
+    public synchronized void reloadImportedDictionary() {
+        try {
+            if (mRecManImportedDict != null) {
+                try {
+                    mRecManImportedDict.close();
+                } catch (Exception ignored) {
+                }
+                mRecManImportedDict = null;
+            }
+            mRecManImportedDict = RecordManagerFactory.createRecordManager(mFilesDirPath + "/" + IMPORTED_DICT);
+            long recId = mRecManImportedDict.getNamedObject(BTREE_NAME);
+            if (recId == 0) {
+                mBTreeImportedDict = BTree.createInstance(mRecManImportedDict, new StringComparator());
+                mRecManImportedDict.setNamedObject(BTREE_NAME, mBTreeImportedDict.getRecid());
+                mRecManImportedDict.commit();
+            } else {
+                mBTreeImportedDict = BTree.load(mRecManImportedDict, recId);
+            }
+        } catch (IOException e) {
+            Log.e("Dictionary", "Failed to reload imported dictionary: " + e.getMessage());
+            mRecManImportedDict = null;
+            mBTreeImportedDict = null;
         }
     }
 
@@ -533,6 +674,7 @@ public class Dictionary {
      */
     public interface ImportProgressListener {
         void onProgress(int count, String currentKey);
+
         boolean isCancelled();
     }
 
@@ -890,7 +1032,35 @@ public class Dictionary {
      */
     public void commitChanges() {
         try {
-            mRecManUserDict.commit();
+            if (mRecManUserDict != null) {
+                mRecManUserDict.commit();
+            }
+        } catch (Exception ignored) {
+        }
+    }
+
+    /**
+     * データベースリソースをコミットして正常にクローズします。
+     */
+    public synchronized void close() {
+        mOldKey = null;
+        mOldValue = null;
+        try {
+            if (mRecManUserDict != null) {
+                mRecManUserDict.commit();
+                mRecManUserDict.close();
+                mRecManUserDict = null;
+                mBTreeUserDict = null;
+            }
+        } catch (Exception ignored) {
+        }
+        try {
+            if (mRecManImportedDict != null) {
+                mRecManImportedDict.commit();
+                mRecManImportedDict.close();
+                mRecManImportedDict = null;
+                mBTreeImportedDict = null;
+            }
         } catch (Exception ignored) {
         }
     }

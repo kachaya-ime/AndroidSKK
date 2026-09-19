@@ -4,7 +4,6 @@ import android.annotation.SuppressLint;
 import android.content.Context;
 import android.content.res.Resources;
 import android.graphics.Canvas;
-import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.Path;
 import android.graphics.RectF;
@@ -15,6 +14,7 @@ import android.view.MotionEvent;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.core.content.res.ResourcesCompat;
+import androidx.core.graphics.drawable.DrawableCompat;
 
 import io.github.kachaya.skk.R;
 
@@ -119,7 +119,7 @@ public class StrokeKeyboardView extends KeyboardView {
         mPaint = new Paint();
         mPaint.setAntiAlias(true);
         mPaint.setDither(true);
-        mPaint.setColor(Color.WHITE); // 線の色
+        mPaint.setColor(ResourcesCompat.getColor(res, R.color.stroke_line_color, context.getTheme())); // 線の色
         mPaint.setStyle(Paint.Style.STROKE);
         mPaint.setStrokeJoin(Paint.Join.ROUND);
         mPaint.setStrokeCap(Paint.Cap.ROUND);
@@ -314,16 +314,21 @@ public class StrokeKeyboardView extends KeyboardView {
         int right = (int) (cx + r);
         int bottom = (int) (cy + r);
 
+        int strokeColor = ResourcesCompat.getColor(getResources(), R.color.stroke_line_color, getContext().getTheme());
+
         if (mCtrlSingleFlag) {
+            DrawableCompat.setTint(mCtrlSingleDrawable, strokeColor);
             mCtrlSingleDrawable.setBounds(left, top, right, bottom);
             mCtrlSingleDrawable.draw(canvas);
         } else if (mPunctuationFlag) {
             canvas.drawCircle(cx, cy, r, mPaint);
         } else {
             if (mShiftLockFlag) {
+                DrawableCompat.setTint(mShiftLockDrawable, strokeColor);
                 mShiftLockDrawable.setBounds(left, top, right, bottom);
                 mShiftLockDrawable.draw(canvas);
             } else if (mShiftSingleFlag) {
+                DrawableCompat.setTint(mShiftSingleDrawable, strokeColor);
                 mShiftSingleDrawable.setBounds(left, top, right, bottom);
                 mShiftSingleDrawable.draw(canvas);
             }
@@ -333,7 +338,7 @@ public class StrokeKeyboardView extends KeyboardView {
 
         // モード表示
         if (mModeIconDrawable != null) {
-            // 右上に表示。余白は h * 0.05f 程度、サイズは h * 0.1f 程度
+            DrawableCompat.setTint(mModeIconDrawable, strokeColor);
             float size = h * 0.1f;
             float margin = h * 0.05f;
             int leftMode = (int) (w - margin - size);

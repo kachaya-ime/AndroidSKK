@@ -4,36 +4,28 @@ import android.app.Activity;
 import android.content.Intent;
 import android.net.Uri;
 import android.os.Bundle;
-import android.provider.DocumentsContract;
 import android.view.Menu;
 import android.view.MenuInflater;
 import android.view.MenuItem;
 import android.view.View;
 import android.widget.ArrayAdapter;
-import android.widget.LinearLayout;
 import android.widget.ListView;
-import android.widget.ProgressBar;
-import android.widget.TextView;
 
 import androidx.activity.result.ActivityResult;
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.NonNull;
+import androidx.appcompat.app.ActionBar;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 
 import com.google.android.material.snackbar.Snackbar;
 
 import java.io.BufferedWriter;
-import java.io.InputStream;
-import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.io.OutputStreamWriter;
-import java.nio.charset.CharacterCodingException;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 
 import io.github.kachaya.skk.engine.Dictionary;
 
@@ -70,6 +62,11 @@ public class DictionaryTool extends AppCompatActivity {
         setContentView(R.layout.activity_dictionary_tool);
         mDictionary = new Dictionary(this);
 
+        ActionBar actionBar = getSupportActionBar();
+        if (actionBar != null) {
+            actionBar.setDisplayHomeAsUpEnabled(true);
+        }
+
         ListView listView = findViewById(R.id.list_view);
         listView.setEmptyView(findViewById(R.id.empty_text));
 
@@ -86,6 +83,14 @@ public class DictionaryTool extends AppCompatActivity {
             final String item = (String) parent.getItemAtPosition(position);
             showCandidateSelectionDialog(item);
         });
+    }
+
+    @Override
+    protected void onDestroy() {
+        if (mDictionary != null) {
+            mDictionary.close();
+        }
+        super.onDestroy();
     }
 
     /**
@@ -236,7 +241,10 @@ public class DictionaryTool extends AppCompatActivity {
     @Override
     public boolean onOptionsItemSelected(@NonNull MenuItem item) {
         int itemId = item.getItemId();
-        if (itemId == R.id.menu_export_user) {
+        if (itemId == android.R.id.home) {
+            finish();
+            return true;
+        } else if (itemId == R.id.menu_export_user) {
             onClickExportDictionary();
             return true;
         } else if (itemId == R.id.menu_clear_user) {

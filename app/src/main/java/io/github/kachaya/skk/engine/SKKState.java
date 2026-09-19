@@ -55,10 +55,10 @@ public interface SKKState {
      * Ctrl キーと同時押しのキー入力を、現在の状態に従って処理します。
      *
      * @param context SKK エンジンのコンテキスト
-     * @param keyCode KeyEvent で定義されているキーコード
+     * @param action  割り当てられている CtrlAction
      * @return イベントを消費した場合は true
      */
-    boolean processCtrlKey(SKKEngine context, int keyCode);
+    boolean processCtrlKey(SKKEngine context, CtrlAction action);
 
     /**
      * Tab キーの入力を処理します。主に変換候補の選択や補完に使用されます。

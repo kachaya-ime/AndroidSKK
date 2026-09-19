@@ -52,13 +52,45 @@ public class Candidate {
 
         // エスケープ解除とテンプレート解決
         String decodedTemplate = unescape(template);
-        this.annotation = (annotation != null) ? unescape(annotation) : null;
+        String resolvedAnnotation = annotation;
+        if (resolvedAnnotation == null && decodedTemplate != null) {
+            int sepIdx = findAnnotationSeparator(decodedTemplate);
+            if (sepIdx != -1) {
+                resolvedAnnotation = decodedTemplate.substring(sepIdx + 1);
+                decodedTemplate = decodedTemplate.substring(0, sepIdx);
+            }
+        }
+        this.annotation = (resolvedAnnotation != null) ? unescape(resolvedAnnotation) : null;
 
         if (actualNums != null && !actualNums.isEmpty()) {
             this.candidate = resolveNumericTemplate(decodedTemplate, actualNums);
         } else {
             this.candidate = decodedTemplate;
         }
+    }
+
+    /**
+     * 文字列から候補本体と注釈を区切る ';' のインデックスを検索します。
+     */
+    public static int findAnnotationSeparator(String s) {
+        if (s == null || s.isEmpty()) return -1;
+        boolean inQuote = false;
+        int nest = 0;
+        for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
+            if (c == '"') {
+                inQuote = !inQuote;
+            } else if (!inQuote) {
+                if (c == '(') {
+                    nest++;
+                } else if (c == ')') {
+                    if (nest > 0) nest--;
+                } else if (c == ';' && nest == 0) {
+                    return i;
+                }
+            }
+        }
+        return -1;
     }
 
     /**

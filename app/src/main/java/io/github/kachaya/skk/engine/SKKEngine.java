@@ -1,6 +1,7 @@
 package io.github.kachaya.skk.engine;
 
 import android.content.Context;
+import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.res.Resources;
 import android.text.SpannableStringBuilder;
@@ -20,14 +21,17 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Deque;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 
 import io.github.kachaya.skk.BuildConfig;
 import io.github.kachaya.skk.InputService;
 import io.github.kachaya.skk.R;
+import io.github.kachaya.skk.SettingsActivity;
 
 /**
  * SKK の入力・変換ロジックを統括する engine クラスです。
@@ -47,20 +51,31 @@ public class SKKEngine {
     private final Context mContext;
     /** ローマ字かな変換エンジン。 */
     private final RomajiConverter mConverter;
+
+    public RomajiConverter getConverter() {
+        return mConverter;
+    }
+
     /**
      * 漢字変換または Abbrev 変換の「見出し語（Headword）」バッファ。
      * 変換開始から確定まで内容が保持されます。
      */
     private final StringBuilder mHeadword = new StringBuilder();
+    /** 見出し語バッファ（mHeadword）内でのカーソルインデックス（0 ～ mHeadword.length()）。 */
+    private int mHeadwordCursor = 0;
+    /** ユーザーが明示的に見出し語内でカーソルを移動させたかどうかのフラグ。 */
+    private boolean mIsCursorMovedInHeadword = false;
+    /** カーソル位置での変換開始時に、変換対象から外れた後続の見出し語文字列。 */
+    private String mRemainingHeadword = null;
     /**
      * 単語登録プロセスのコンテキストを保持するスタック。
      * 再帰的な登録（登録中に別の単語を登録する等）に対応するため、{@link Deque} を使用します。
      */
     private final Deque<RegistrationInfo> mRegistrationStack = new ArrayDeque<>();
     /** ▽（見出し語入力中）の背景色。 */
-    private final int mColorComposing;
+    private int mColorComposing;
     /** ▼（変換中）の背景色。 */
-    private final int mColorConverting;
+    private int mColorConverting;
     /** 全角入力が優先される記号（。、など）のマッピングテーブル。 */
     private final Map<String, String> mFullWidthSeparatorMap;
     /** 現在の入力モード。初期値は全角ひらがな。 */
@@ -86,12 +101,14 @@ public class SKKEngine {
     private boolean mDisplayState = true;
     /** 半角カタカナを使用するかどうか。 */
     private boolean mUseJisx0201Kana = false;
-    /** 設定により ユーザー辞書への学習機能をを有効にするかどうか。 */
+    /** 設定により ユーザー辞書への学習機能を有効にするかどうか。 */
     private boolean mEnableLearning = true;
     /** 候補選択が最後に達したときに辞書登録するかどうか。 */
     private boolean mRegisterOnLastCandidate = true;
     /** 直近の正常な確定情報（再変換用）。 */
     private ConversionInfo mLastConversion = null;
+    /** Ctrl キーショートカットの割り当てマップ。 */
+    private Map<Integer, CtrlAction> mCtrlShortcutMap = null;
 
 
     /**
@@ -103,6 +120,20 @@ public class SKKEngine {
         return mMode;
     }
 
+    /**
+     * 現在の入力状態を取得します。
+     *
+     * @return 現在の {@link SKKState}
+     */
+    public SKKState getState() {
+        return mState;
+    }
+
+    /**
+     * コンテキストを取得します。
+     *
+     * @return コンテキスト
+     */
     public Context getContext() {
         return mContext;
     }
@@ -115,16 +146,33 @@ public class SKKEngine {
      */
     public SKKEngine(Context context, Dictionary dictionary) {
         mContext = context;
-        mService = (InputService) context;
+        mService = (context instanceof InputService) ? (InputService) context : null;
         mDictionary = dictionary;
         mConverter = new RomajiConverter(this);
 
         mFullWidthSeparatorMap = new HashMap<>();
-        readPrefs();
+        mFullWidthSeparatorMap.put(".", "。");
+        RomajiConverter.setSeparator(".", "。");
+        mFullWidthSeparatorMap.put(",", "、");
+        RomajiConverter.setSeparator(",", "、");
+        if (mContext != null) {
+            readPrefs();
+            updateColors();
+        } else {
+            mColorComposing = 0;
+            mColorConverting = 0;
+        }
+    }
 
-        Resources res = context.getResources();
-        mColorComposing = res.getColor(R.color.composing_composing, context.getTheme());
-        mColorConverting = res.getColor(R.color.composing_converting, context.getTheme());
+    /**
+     * 現在のリソース／テーマ設定に基づいて、入力・変換中の背景色を更新します。
+     */
+    public void updateColors() {
+        if (mContext != null) {
+            Resources res = mContext.getResources();
+            mColorComposing = res.getColor(R.color.composing_composing, mContext.getTheme());
+            mColorConverting = res.getColor(R.color.composing_converting, mContext.getTheme());
+        }
     }
 
     /**
@@ -146,6 +194,7 @@ public class SKKEngine {
      * </p>
      */
     public void readPrefs() {
+        if (mContext == null) return;
 
         SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(mContext);
 
@@ -153,16 +202,20 @@ public class SKKEngine {
         boolean useKutenJp = prefs.getBoolean("use_kuten_jp", true);
         String kuten = useKutenJp ? "。" : "．";
         mFullWidthSeparatorMap.put(".", kuten);
+        RomajiConverter.setSeparator(".", kuten);
 
         boolean useToutenJp = prefs.getBoolean("use_touten_jp", true);
         String touten = useToutenJp ? "、" : "，";
         mFullWidthSeparatorMap.put(",", touten);
+        RomajiConverter.setSeparator(",", touten);
 
         // 各種フラグの更新
         mDisplayState = prefs.getBoolean("display_state", true);
         mUseJisx0201Kana = prefs.getBoolean("use_jisx0201_kana", false);
         mEnableLearning = prefs.getBoolean("enable_learning", true);
         mRegisterOnLastCandidate = prefs.getBoolean("register_on_last_candidate", true);
+
+        mCtrlShortcutMap = CtrlShortcutManager.loadMappings(prefs);
 
         logI("readPrefs: useKutenJp =" + useKutenJp);
         logI("readPrefs: useToutenJp =" + useToutenJp);
@@ -236,11 +289,21 @@ public class SKKEngine {
      * @return イベントを消費した場合は true
      */
     public boolean processCtrlKey(int keyCode) {
-        if (mState.processCtrlKey(this, keyCode)) {
+        if (CtrlShortcutManager.isSystemReserved(keyCode)) {
+            return false;
+        }
+        CtrlAction action = (mCtrlShortcutMap != null) ? mCtrlShortcutMap.get(keyCode) : null;
+        if (action == null) {
+            action = CtrlShortcutManager.getDefaultMappings().get(keyCode);
+        }
+        if (action == null || action == CtrlAction.NONE) {
+            return false;
+        }
+        if (mState.processCtrlKey(this, action)) {
             updateComposingText();
             return true;
         }
-        if (mMode.processCtrlKey(this, keyCode)) {
+        if (mMode.processCtrlKey(this, action)) {
             updateComposingText();
             return true;
         }
@@ -293,6 +356,11 @@ public class SKKEngine {
         mConverter.processKey(code);
     }
 
+    public boolean processRomajiExtension(String text, boolean isUpper) {
+        return mState.processRomajiExtension(this, text, isUpper);
+    }
+
+
     /**
      * ローマ字かな変換エンジンから確定テキスト（または記号）を受け取り、処理します。
      * <p>
@@ -305,9 +373,15 @@ public class SKKEngine {
      * @param isUpper シフトキーが押されていたかどうか
      */
     public void commitRomajiText(String text, char initial, boolean isUpper) {
+        if (mMode == SKKModeHalfLatin.INSTANCE || mMode == SKKModeFullLatin.INSTANCE) {
+            String committedText = mFullWidthSeparatorMap.getOrDefault(text, text);
+            mState.processText(this, committedText, initial, isUpper);
+            return;
+        }
+
         if (text != null) {
             // 状態（State）側での特殊キー処理（q, l, /, >, . 等）を優先
-            boolean handledByState = mState.processRomajiExtension(this, text, isUpper);
+            boolean handledByState = processRomajiExtension(text, isUpper);
             if (handledByState) {
                 return;
             }
@@ -444,6 +518,153 @@ public class SKKEngine {
     }
 
     /**
+     * 英語モード（半角英数）と日本語モード（ひらがな）を交互に切り替えます。
+     */
+    public void toggleEnglishJapanese() {
+        if (mMode == SKKModeHalfLatin.INSTANCE || mMode == SKKModeFullLatin.INSTANCE) {
+            handleKanaKey();
+        } else {
+            mConverter.flush();
+            mState.finish(this);
+            changeState(SKKStateDirect.INSTANCE);
+            changeMode(SKKModeHalfLatin.INSTANCE, true);
+            updateComposingText();
+        }
+    }
+
+    /**
+     * カーソル位置から行末までの文字列を削除します（Kill Line）。
+     *
+     * @return 処理が行われた場合は true
+     */
+    public boolean handleKillLine() {
+        InputConnection ic = mService.getCurrentInputConnection();
+        if (ic == null) {
+            return false;
+        }
+        CharSequence textAfter = ic.getTextAfterCursor(2000, 0);
+        if (textAfter == null || textAfter.length() == 0) {
+            return false;
+        }
+        int len;
+        int newlineIdx = -1;
+        for (int i = 0; i < textAfter.length(); i++) {
+            if (textAfter.charAt(i) == '\n' || textAfter.charAt(i) == '\r') {
+                newlineIdx = i;
+                break;
+            }
+        }
+        if (newlineIdx == 0) {
+            len = 1;
+        } else if (newlineIdx > 0) {
+            len = newlineIdx;
+        } else {
+            len = textAfter.length();
+        }
+        return ic.deleteSurroundingText(0, len);
+    }
+
+    /**
+     * カーソル位置から行頭までの文字列を削除します（Kill Line Backward 相当）。
+     *
+     * @return 処理が行われた場合は true
+     */
+    public boolean handleKillLineBackward() {
+        InputConnection ic = mService.getCurrentInputConnection();
+        if (ic == null) {
+            return false;
+        }
+        CharSequence textBefore = ic.getTextBeforeCursor(2000, 0);
+        if (textBefore == null || textBefore.length() == 0) {
+            return false;
+        }
+        int len;
+        int newlineIdx = -1;
+        for (int i = textBefore.length() - 1; i >= 0; i--) {
+            if (textBefore.charAt(i) == '\n' || textBefore.charAt(i) == '\r') {
+                newlineIdx = i;
+                break;
+            }
+        }
+        if (newlineIdx == textBefore.length() - 1) {
+            len = 1;
+        } else if (newlineIdx >= 0) {
+            len = textBefore.length() - 1 - newlineIdx;
+        } else {
+            len = textBefore.length();
+        }
+        return ic.deleteSurroundingText(len, 0);
+    }
+
+    /**
+     * カーソル位置から前方へ単語単位で削除します（Backward Kill Word 相当）。
+     *
+     * @return 処理が行われた場合は true
+     */
+    public boolean handleKillWordBackward() {
+        InputConnection ic = mService.getCurrentInputConnection();
+        if (ic == null) {
+            return false;
+        }
+        CharSequence textBefore = ic.getTextBeforeCursor(200, 0);
+        if (textBefore == null || textBefore.length() == 0) {
+            return false;
+        }
+        String s = textBefore.toString();
+        int i = s.length() - 1;
+        while (i >= 0 && Character.isWhitespace(s.charAt(i))) {
+            i--;
+        }
+        if (i < 0) {
+            return ic.deleteSurroundingText(s.length(), 0);
+        }
+        int charType = getCharType(s.charAt(i));
+        while (i >= 0) {
+            char c = s.charAt(i);
+            if (Character.isWhitespace(c) || getCharType(c) != charType) {
+                break;
+            }
+            i--;
+        }
+        int len = s.length() - 1 - i;
+        if (len <= 0) {
+            len = 1;
+        }
+        return ic.deleteSurroundingText(len, 0);
+    }
+
+    private int getCharType(char c) {
+        if (Character.isWhitespace(c)) return 0;
+        if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9')) return 1;
+        if (c >= '\u3040' && c <= '\u309F') return 2;
+        if (c >= '\u30A0' && c <= '\u30FF') return 3;
+        if (c >= '\u4E00' && c <= '\u9FAF') return 4;
+        return 5;
+    }
+
+    /**
+     * 設定画面（SettingsActivity）を起動します。
+     */
+    public void launchSettings() {
+        try {
+            Intent intent = new Intent(mContext, SettingsActivity.class);
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            mContext.startActivity(intent);
+        } catch (Exception e) {
+            Log.e("SKKEngine", "Failed to launch SettingsActivity", e);
+        }
+    }
+
+    /**
+     * 絵文字ピッカーを開きます。
+     */
+    public void openEmojiPicker() {
+        if (mContext instanceof InputService) {
+            ((InputService) mContext).openEmojiPicker();
+        }
+    }
+
+    /**
      * 現在のモードに基づき、トグルした際になるべき次の「かな」モードを取得します。
      *
      * @return 次の {@link SKKMode}
@@ -472,16 +693,11 @@ public class SKKEngine {
      * @param newCursorPosition コミット後の新しいカーソル位置
      */
     public void commitTextSKK(CharSequence text, int newCursorPosition) {
-        InputConnection ic = mService.getCurrentInputConnection();
-        if (ic == null) {
-            return;
-        }
-
         RegistrationInfo regInfo = mRegistrationStack.peekFirst();
         if (regInfo != null) {
             regInfo.entry.append(text);
-        } else {
-            ic.commitText(text, newCursorPosition);
+        } else if (mService != null) {
+            mService.commitText(text, newCursorPosition);
         }
     }
 
@@ -550,6 +766,7 @@ public class SKKEngine {
 
         mCurrentSuggestionIndex = nextIndex;
         mService.requestChooseCandidate(mCurrentSuggestionIndex);
+        updateFloatingCandidates();
     }
 
     /**
@@ -579,6 +796,7 @@ public class SKKEngine {
             } else {
                 mCurrentCandidateIndex = 0;
                 mService.requestChooseCandidate(mCurrentCandidateIndex);
+                updateFloatingCandidates();
             }
             updateComposingText();
             return;
@@ -601,6 +819,7 @@ public class SKKEngine {
         }
         mCurrentCandidateIndex = nextIndex;
         mService.requestChooseCandidate(mCurrentCandidateIndex);
+        updateFloatingCandidates();
         updateComposingText();
     }
 
@@ -643,6 +862,177 @@ public class SKKEngine {
     }
 
     /**
+     * 見出し語のカーソル位置を取得します。
+     *
+     * @return 0 から mHeadword.length() までのカーソル位置
+     */
+    public int getHeadwordCursor() {
+        if (!mIsCursorMovedInHeadword) {
+            return mHeadword.length();
+        }
+        return Math.max(0, Math.min(mHeadword.length(), mHeadwordCursor));
+    }
+
+    /**
+     * 見出し語のカーソル位置を設定します。
+     *
+     * @param cursor 新しいカーソル位置
+     */
+    public void setHeadwordCursor(int cursor) {
+        mHeadwordCursor = Math.max(0, Math.min(mHeadword.length(), cursor));
+        mIsCursorMovedInHeadword = true;
+        updateUI();
+    }
+
+    /**
+     * 見出し語のカーソル位置を相対移動します。
+     *
+     * @param delta 移動量（正で右移動、負で左移動）
+     */
+    public void moveHeadwordCursor(int delta) {
+        setHeadwordCursor(getHeadwordCursor() + delta);
+    }
+
+    /**
+     * 見出し語バッファの指定したカーソル位置にテキストを挿入します。
+     *
+     * @param text 挿入するテキスト
+     */
+    public void insertHeadwordText(String text) {
+        if (text == null || text.isEmpty()) {
+            return;
+        }
+        if (!mIsCursorMovedInHeadword) {
+            mHeadword.append(text);
+            mHeadwordCursor = mHeadword.length();
+        } else {
+            int pos = getHeadwordCursor();
+            mHeadword.insert(pos, text);
+            mHeadwordCursor = pos + text.length();
+        }
+        updateUI();
+    }
+
+    /**
+     * 見出し語バッファのカーソル直前の 1 文字を削除します（Backspace 相当）。
+     *
+     * @return 削除が実行された場合は true
+     */
+    public boolean deleteHeadwordCharBeforeCursor() {
+        int pos = getHeadwordCursor();
+        if (pos > 0) {
+            mHeadword.delete(pos - 1, pos);
+            mHeadwordCursor = pos - 1;
+            updateUI();
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * 見出し語バッファのカーソル直後の 1 文字を削除します（Forward Delete 相当）。
+     *
+     * @return 削除が実行された場合は true
+     */
+    public boolean deleteHeadwordCharAfterCursor() {
+        int pos = getHeadwordCursor();
+        if (pos < mHeadword.length()) {
+            mHeadword.delete(pos, pos + 1);
+            updateUI();
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * 見出し語バッファのカーソル位置から末尾までを削除します（Kill Line 相当）。
+     *
+     * @return 削除が実行された場合は true
+     */
+    public boolean killHeadwordToLineEnd() {
+        int pos = getHeadwordCursor();
+        if (pos < mHeadword.length()) {
+            mHeadword.delete(pos, mHeadword.length());
+            updateUI();
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * 見出し語バッファのカーソル位置から前方へ単語単位で削除します。
+     *
+     * @return 削除が実行された場合は true
+     */
+    public boolean killWordHeadwordBackward() {
+        int pos = getHeadwordCursor();
+        if (pos <= 0) {
+            return false;
+        }
+        String s = mHeadword.substring(0, pos);
+        int i = s.length() - 1;
+        while (i >= 0 && Character.isWhitespace(s.charAt(i))) {
+            i--;
+        }
+        if (i < 0) {
+            mHeadword.delete(0, pos);
+            mHeadwordCursor = 0;
+            updateUI();
+            return true;
+        }
+        int charType = getCharType(s.charAt(i));
+        while (i >= 0) {
+            char c = s.charAt(i);
+            if (Character.isWhitespace(c) || getCharType(c) != charType) {
+                break;
+            }
+            i--;
+        }
+        int start = i + 1;
+        mHeadword.delete(start, pos);
+        mHeadwordCursor = start;
+        updateUI();
+        return true;
+    }
+
+    /**
+     * 見出し語バッファの先頭からカーソル位置までを削除します（Kill Line Backward 相当）。
+     *
+     * @return 削除が実行された場合は true
+     */
+    public boolean killHeadwordToLineStart() {
+        int pos = getHeadwordCursor();
+        if (pos > 0) {
+            mHeadword.delete(0, pos);
+            mHeadwordCursor = 0;
+            updateUI();
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * 見出し語バッファがクリア・再設定された際にカーソルを末尾にリセットします。
+     */
+    public void resetHeadwordCursor() {
+        mHeadwordCursor = mHeadword.length();
+        mIsCursorMovedInHeadword = false;
+    }
+
+    /**
+     * 後続の見出し語（mRemainingHeadword）が存在する場合、それを見出し語バッファへ戻します。
+     */
+    public void restoreRemainingHeadword() {
+        if (mRemainingHeadword != null) {
+            int currentHeadwordLen = mHeadword.length();
+            mHeadword.append(mRemainingHeadword);
+            mRemainingHeadword = null;
+            mHeadwordCursor = currentHeadwordLen;
+            mIsCursorMovedInHeadword = true;
+        }
+    }
+
+    /**
      * 現在の送り仮名を取得します。
      *
      * @return 送り仮名文字列
@@ -679,6 +1069,15 @@ public class SKKEngine {
     }
 
     /**
+     * 単語登録スタックを取得します。
+     *
+     * @return 単語登録情報の Deque
+     */
+    public Deque<RegistrationInfo> getRegistrationStack() {
+        return mRegistrationStack;
+    }
+
+    /**
      * 現在の（スタック最上層の）単語登録情報を取得します。
      *
      * @return RegistrationInfo インスタンス、または null
@@ -701,53 +1100,117 @@ public class SKKEngine {
             Iterator<RegistrationInfo> iterator = mRegistrationStack.descendingIterator();
             while (iterator.hasNext()) {
                 RegistrationInfo regInfo = iterator.next();
-                int bgStart = ct.length();
-                if (mDisplayState) {
-                    ct.append("▼");
+                int headerStart = ct.length();
+                String header = "【辞書登録: " + regInfo.displayKey + "】";
+                ct.append(header);
+                int headerEnd = ct.length();
+                ct.setSpan(new BackgroundColorSpan(mColorConverting), headerStart, headerEnd, Spanned.SPAN_COMPOSING);
+
+                CharSequence converterText = (regInfo == mRegistrationStack.peekFirst()) ? mConverter.getComposing() : null;
+                String fullEntryText = regInfo.entry.toString() + (converterText != null ? converterText.toString() : "");
+                if (!fullEntryText.isEmpty()) {
+                    int bodyStart = ct.length();
+                    ct.append(" ");
+                    ct.append(fullEntryText);
+                    int bodyEnd = ct.length();
+                    ct.setSpan(new BackgroundColorSpan(mColorComposing), bodyStart, bodyEnd, Spanned.SPAN_COMPOSING);
                 }
-                ct.append(regInfo.displayKey).append("：");
-                int bgEnd = ct.length();
-                BackgroundColorSpan regBgSpan = new BackgroundColorSpan(mColorConverting);
-                ct.setSpan(regBgSpan, bgStart, bgEnd, Spanned.SPAN_COMPOSING);
-                ct.append(regInfo.entry);
             }
         }
 
-        BackgroundColorSpan bg = null;
-        int bgStart = 0;
-
         if (mState.isConverting()) {
-            bg = new BackgroundColorSpan(mColorConverting);
-            bgStart = ct.length();
+            int targetStart = ct.length();
             if (mDisplayState) {
                 ct.append("▼");
             }
+            CharSequence stateText = mState.getComposingText(this);
+            if (stateText != null) {
+                ct.append(stateText);
+            }
+            CharSequence converterText = mConverter.getComposing();
+            ct.append(converterText);
+            int targetEnd = ct.length();
+
+            ct.setSpan(new BackgroundColorSpan(mColorConverting), targetStart, targetEnd, Spanned.SPAN_COMPOSING);
+
+            if (mRemainingHeadword != null) {
+                int remStart = ct.length();
+                if (mDisplayState) {
+                    ct.append("▽");
+                }
+                ct.append(convertText(mRemainingHeadword));
+                int remEnd = ct.length();
+                ct.setSpan(new BackgroundColorSpan(mColorComposing), remStart, remEnd, Spanned.SPAN_COMPOSING);
+            }
         } else if (mState.isTransient()) {
-            bg = new BackgroundColorSpan(mColorComposing);
-            bgStart = ct.length();
-            if (mDisplayState) {
-                ct.append("▽");
+            if (mState == SKKStateHeadword.INSTANCE) {
+                int cursor = getHeadwordCursor();
+                CharSequence convertedHeadword = convertText(mHeadword);
+                String headwordStr = convertedHeadword.toString();
+                cursor = Math.max(0, Math.min(headwordStr.length(), cursor));
+
+                String firstPart = headwordStr.substring(0, cursor);
+                String secondPart = headwordStr.substring(cursor);
+                CharSequence converterText = mConverter.getComposing();
+
+                boolean isPartial = (cursor < headwordStr.length());
+
+                int symStart = ct.length();
+                if (mDisplayState) {
+                    ct.append("▽");
+                }
+                ct.append(firstPart);
+                ct.append(converterText);
+                int targetEnd = ct.length();
+
+                int nonTargetStart = ct.length();
+                ct.append(secondPart);
+                int nonTargetEnd = ct.length();
+
+                if (isPartial) {
+                    // 変換範囲変更時: 変換対象（firstPart）を変換用の背景色（mColorConverting）でハイライト
+                    ct.setSpan(new BackgroundColorSpan(mColorConverting), symStart, targetEnd, Spanned.SPAN_COMPOSING);
+                    if (nonTargetStart < nonTargetEnd) {
+                        ct.setSpan(new BackgroundColorSpan(mColorComposing), nonTargetStart, nonTargetEnd, Spanned.SPAN_COMPOSING);
+                    }
+                } else {
+                    // 通常の見出し語入力時: 全体を mColorComposing でハイライト
+                    ct.setSpan(new BackgroundColorSpan(mColorComposing), symStart, ct.length(), Spanned.SPAN_COMPOSING);
+                }
+            } else {
+                int bgStart = ct.length();
+                if (mDisplayState) {
+                    ct.append("▽");
+                }
+                CharSequence stateText = mState.getComposingText(this);
+                if (stateText != null) {
+                    ct.append(stateText);
+                }
+                CharSequence converterText = mConverter.getComposing();
+                ct.append(converterText);
+                int bgEnd = ct.length();
+                ct.setSpan(new BackgroundColorSpan(mColorComposing), bgStart, bgEnd, Spanned.SPAN_COMPOSING);
+            }
+        } else {
+            CharSequence converterText = mConverter.getComposing();
+            if (converterText != null && converterText.length() > 0) {
+                int bgStart = ct.length();
+                ct.append(converterText);
+                int bgEnd = ct.length();
+                ct.setSpan(new BackgroundColorSpan(mColorComposing), bgStart, bgEnd, Spanned.SPAN_COMPOSING);
             }
         }
 
-        CharSequence stateText = mState.getComposingText(this);
-        if (stateText != null) {
-            ct.append(stateText);
-        }
-        CharSequence converterText = mConverter.getComposing();
-        ct.append(converterText);
-
-        if (bg != null) {
-            int bgEnd = ct.length();
-            ct.setSpan(bg, bgStart, bgEnd, Spanned.SPAN_COMPOSING);
-        }
         int totalLen = ct.length();
         if (totalLen != 0) {
             UnderlineSpan underline = new UnderlineSpan();
             ct.setSpan(underline, 0, totalLen, Spanned.SPAN_COMPOSING);
         }
 
-        mService.setComposingText(ct, 1);
+        if (mService != null) {
+            mService.setComposingText(ct, 1);
+            updateFloatingCandidates();
+        }
     }
 
     /**
@@ -757,7 +1220,41 @@ public class SKKEngine {
      * 直ちに単語登録モードへ移行します。
      * </p>
      */
+    public boolean registrationConversionStart() {
+        RegistrationInfo regInfo = mRegistrationStack.peekFirst();
+        if (regInfo == null) return false;
+        String query = regInfo.key;
+        List<Candidate> list = (mDictionary != null)
+                ? new ArrayList<>(mDictionary.findCandidates(query, regInfo.okurigana))
+                : new ArrayList<>();
+        if (list.isEmpty()) {
+            list.add(createDynamicCand(query));
+        }
+        changeState(SKKStateHeadwordConversion.INSTANCE);
+        mCandidateList = list;
+        mCurrentCandidateIndex = 0;
+        updateCandidates();
+        return true;
+    }
+
     public void conversionStart() {
+        if (mIsCursorMovedInHeadword) {
+            int pos = getHeadwordCursor();
+            int len = mHeadword.length();
+            if (pos < len && pos > 0) {
+                String targetHeadword = mHeadword.substring(0, pos);
+                String remaining = mHeadword.substring(pos);
+                mHeadword.setLength(0);
+                mHeadword.append(targetHeadword);
+                mRemainingHeadword = remaining;
+                resetHeadwordCursor();
+            } else {
+                mRemainingHeadword = null;
+            }
+        } else {
+            mRemainingHeadword = null;
+        }
+
         boolean success = conversionStartInternal(false, false);
         if (!success) {
             if (mEnableLearning) {
@@ -807,7 +1304,38 @@ public class SKKEngine {
             query += mOkuriConsonant;
         }
 
-        List<Candidate> list = mDictionary.findCandidates(query, mOkurigana);
+        List<Candidate> list = (mDictionary != null)
+                ? new ArrayList<>(mDictionary.findCandidates(query, mOkurigana))
+                : new ArrayList<>();
+        List<Candidate> dynamicList = getDynamicCandidates(query);
+
+        Set<String> seen = new HashSet<>();
+        List<Candidate> merged = new ArrayList<>();
+
+        for (Candidate c : list) {
+            if (seen.add(c.candidate)) {
+                merged.add(c);
+            }
+        }
+
+        if (!dynamicList.isEmpty()) {
+            for (Candidate c : dynamicList) {
+                if (seen.add(c.candidate)) {
+                    merged.add(c);
+                }
+            }
+        }
+
+        if (abbrev && !query.isEmpty()) {
+            Capitalization cap = getCapitalization(query);
+            String headwordSelf = applyCapitalization(query, cap);
+            if (seen.add(headwordSelf)) {
+                merged.add(createDynamicCand(headwordSelf));
+            }
+        }
+
+        list = merged;
+
         if (list.isEmpty()) {
             return false;
         }
@@ -821,6 +1349,12 @@ public class SKKEngine {
 
         if (abbrev) {
             changeState(SKKStateAbbrevConversion.INSTANCE);
+            Capitalization cap = getCapitalization(query);
+            if (cap != Capitalization.LOWER) {
+                for (Candidate c : list) {
+                    c.candidate = applyCapitalization(c.candidate, cap);
+                }
+            }
         } else {
             changeState(SKKStateHeadwordConversion.INSTANCE);
         }
@@ -830,12 +1364,13 @@ public class SKKEngine {
         updateCandidates();
         if (mCurrentCandidateIndex != 0) {
             mService.requestChooseCandidate(mCurrentCandidateIndex);
+            updateFloatingCandidates();
         }
         return true;
     }
 
     /**
-     * 直近の正常な確定情報（再変換用）。
+     * 直近の正常な確定情報の再変換（DDSKKの確定取り消し）を行います。
      *
      * @return 再変換が正常に開始された場合は true
      */
@@ -869,20 +1404,291 @@ public class SKKEngine {
     }
 
     /**
-     * 現在の候補リストを整形し、UI 側（InputService）へ送ります。
+     * カーソル位置より前のひらがなを取得し、SKKの見出し語として変換を開始します。
+     *
+     * @return 変換が正常に開始された場合は true
      */
-    private void updateCandidates() {
-        mService.setCandidateObjects(mCandidateList);
+    public boolean convertTextBeforeCursor() {
+        InputConnection ic = mService.getCurrentInputConnection();
+        if (ic == null) {
+            return false;
+        }
+
+        // カーソル直前の文字列を取得（最大50文字）
+        CharSequence textBefore = ic.getTextBeforeCursor(50, 0);
+        if (textBefore == null || textBefore.length() == 0) {
+            return false;
+        }
+
+        // 末尾から連続するひらがなを抽出
+        StringBuilder hiraganaRev = new StringBuilder();
+        for (int i = textBefore.length() - 1; i >= 0; i--) {
+            char c = textBefore.charAt(i);
+            if (c >= '\u3041' && c <= '\u309F') {
+                hiraganaRev.append(c);
+            } else {
+                break;
+            }
+        }
+
+        if (hiraganaRev.length() == 0) {
+            return false;
+        }
+
+        String fullHiragana = hiraganaRev.reverse().toString();
+        String targetHeadword = null;
+
+        // 末尾に接する辞書ヒット最長の見出し語を探す（例: "きょうはかんじ" -> "かんじ"）
+        for (int start = 0; start < fullHiragana.length(); start++) {
+            String sub = fullHiragana.substring(start);
+            List<Candidate> res = mDictionary.findCandidates(sub, null);
+            if (res != null && !res.isEmpty()) {
+                targetHeadword = sub;
+                break;
+            }
+        }
+
+        // 辞書にヒットしなかった場合は、抽出したひらがな全体を見出し語とする
+        if (targetHeadword == null) {
+            targetHeadword = fullHiragana;
+        }
+
+        // エディタ上のカーソル前の該当文字列（targetHeadword の長さ分）を削除
+        ic.deleteSurroundingText(targetHeadword.length(), 0);
+
+        // SKKエンジンの見出し語にセットして変換開始
+        mHeadword.setLength(0);
+        mHeadword.append(targetHeadword);
+        mOkurigana = null;
+        mOkuriConsonant = null;
+
+        boolean success = conversionStartInternal(false, false);
+        if (!success) {
+            if (mEnableLearning) {
+                registerStart(false);
+            } else {
+                commitTextSKK(mMode.convertText(mHeadword), 1);
+                reset();
+                changeState(SKKStateDirect.INSTANCE);
+            }
+        }
+        updateComposingText();
+        return true;
     }
 
     /**
-     * 入力途中の見出し語に基づき、動的補完（Suggestion）    /**
-     * リストを更新します。
+     * カーソル位置以降のひらがなを取得し、SKKの見出し語として変換を開始します。
+     *
+     * @return 変換が正常に開始された場合は true
+     */
+    public boolean convertTextAfterCursor() {
+        InputConnection ic = mService.getCurrentInputConnection();
+        if (ic == null) {
+            return false;
+        }
+
+        // カーソル直後の文字列を取得（最大50文字）
+        CharSequence textAfter = ic.getTextAfterCursor(50, 0);
+        if (textAfter == null || textAfter.length() == 0) {
+            return false;
+        }
+
+        // 先頭から連続するひらがなを抽出
+        StringBuilder hiraganaBuf = new StringBuilder();
+        for (int i = 0; i < textAfter.length(); i++) {
+            char c = textAfter.charAt(i);
+            if (c >= '\u3041' && c <= '\u309F') {
+                hiraganaBuf.append(c);
+            } else {
+                break;
+            }
+        }
+
+        if (hiraganaBuf.length() == 0) {
+            return false;
+        }
+
+        String fullHiragana = hiraganaBuf.toString();
+        String targetHeadword = null;
+
+        // 辞書にヒットする最長の見出し語を探す（例: "かんじを" -> "かんじ"）
+        for (int len = fullHiragana.length(); len > 0; len--) {
+            String sub = fullHiragana.substring(0, len);
+            List<Candidate> res = mDictionary.findCandidates(sub, null);
+            if (res != null && !res.isEmpty()) {
+                targetHeadword = sub;
+                break;
+            }
+        }
+
+        // 辞書にヒットしなかった場合は、抽出したひらがな全体を見出し語とする
+        if (targetHeadword == null) {
+            targetHeadword = fullHiragana;
+        }
+
+        // エディタ上のカーソル以降の該当文字列（targetHeadword の長さ分）を削除
+        ic.deleteSurroundingText(0, targetHeadword.length());
+
+        // SKKエンジンの見出し語にセットして変換開始
+        mHeadword.setLength(0);
+        mHeadword.append(targetHeadword);
+        mOkurigana = null;
+        mOkuriConsonant = null;
+
+        boolean success = conversionStartInternal(false, false);
+        if (!success) {
+            if (mEnableLearning) {
+                registerStart(false);
+            } else {
+                commitTextSKK(mMode.convertText(mHeadword), 1);
+                reset();
+                changeState(SKKStateDirect.INSTANCE);
+            }
+        }
+        updateComposingText();
+        return true;
+    }
+
+
+    /**
+     * 現在選択中の候補インデックスを取得します。
+     *
+     * @return 選択インデックス
+     */
+    public int getCurrentCandidateIndex() {
+        if (mState.isConverting() && !mCandidateList.isEmpty()) {
+            return mCurrentCandidateIndex;
+        } else if (!mSuggestionList.isEmpty()) {
+            return mCurrentSuggestionIndex;
+        }
+        return 0;
+    }
+
+    /**
+     * 候補選択インデックスを直接指定し、UIおよび Composing Text を更新します。
+     *
+     * @param index 設定する新しいインデックス
+     */
+    public void setCandidateIndex(int index) {
+        if (mState.isConverting() && !mCandidateList.isEmpty()) {
+            if (index >= 0 && index < mCandidateList.size()) {
+                mCurrentCandidateIndex = index;
+                if (mService != null) {
+                    mService.requestChooseCandidate(mCurrentCandidateIndex);
+                }
+                updateFloatingCandidates();
+                updateComposingText();
+            }
+        } else if (!mSuggestionList.isEmpty()) {
+            if (index >= 0 && index < mSuggestionList.size()) {
+                mCurrentSuggestionIndex = index;
+                if (mService != null) {
+                    mService.requestChooseCandidate(mCurrentSuggestionIndex);
+                }
+                updateFloatingCandidates();
+                updateComposingText();
+            }
+        }
+    }
+
+    /**
+     * 2次元（上下左右）方向へ候補選択インデックスを移動します。
+     * DPAD または Ctrl+P,N,F,B 時に呼び出されます。
+     *
+     * @param dRow 行方向の移動量 (-1 = 上, +1 = 下)
+     * @param dCol 列方向の移動量 (-1 = 左, +1 = 右)
+     */
+    public void chooseCandidate2D(int dRow, int dCol) {
+        if (mCandidateList.isEmpty() && mSuggestionList.isEmpty()) {
+            return;
+        }
+
+        if (mService != null && mService.isFloatingCandidateEnabled()) {
+            mService.navigateCandidateFlexbox2D(dRow, dCol);
+        } else {
+            if (dCol != 0 || dRow != 0) {
+                chooseAdjacentCandidate(dCol > 0 || dRow > 0);
+            }
+        }
+    }
+
+    private List<String> getAllCandidateItems(List<Candidate> list) {
+        List<String> items = new ArrayList<>();
+        for (Candidate c : list) {
+            if (c.annotation != null && !c.annotation.isEmpty()) {
+                items.add(c.candidate + ";" + c.annotation);
+            } else {
+                items.add(c.candidate);
+            }
+        }
+        return items;
+    }
+
+    private List<String> getAllSuggestionItems(List<String> list) {
+        return new ArrayList<>(list);
+    }
+
+    /**
+     * FlexboxLayout（チップ折り返し）ポップアップ用表示を更新します。
+     * すべての候補を一括配置し、スムーズにスクロール追従させます。
+     */
+    public void updateFloatingCandidates() {
+        if (mService == null) return;
+
+        if (!mService.isFloatingCandidateEnabled()) {
+            mService.hideFloatingCandidates();
+            mService.hideRegistrationPopup();
+            return;
+        }
+
+        RegistrationInfo regInfo = mRegistrationStack.peekFirst();
+
+        if (regInfo != null) {
+            // 単語登録セッション中
+            if (mState.isConverting() && !mCandidateList.isEmpty()) {
+                List<String> items = getAllCandidateItems(mCandidateList);
+                mService.showCandidateFlexboxPopup(null, items, mCurrentCandidateIndex);
+            } else if (!mSuggestionList.isEmpty()) {
+                List<String> items = getAllSuggestionItems(mSuggestionList);
+                mService.showCandidateFlexboxPopup(null, items, mCurrentSuggestionIndex);
+            } else {
+                mService.hideRegistrationPopup();
+            }
+        } else {
+            // 通常時
+            if (mState.isConverting() && !mCandidateList.isEmpty()) {
+                List<String> items = getAllCandidateItems(mCandidateList);
+                mService.showCandidateFlexboxPopup(null, items, mCurrentCandidateIndex);
+            } else if (!mSuggestionList.isEmpty()) {
+                List<String> items = getAllSuggestionItems(mSuggestionList);
+                mService.showCandidateFlexboxPopup(null, items, mCurrentSuggestionIndex);
+            } else {
+                mService.hideFloatingCandidates();
+            }
+        }
+    }
+
+
+    /**
+     * 現在の候補リストを整形し、UI 側（InputService）へ送ります。
+     */
+    private void updateCandidates() {
+        if (mService != null) {
+            mService.setCandidateObjects(mCandidateList);
+            updateFloatingCandidates();
+        }
+    }
+
+    /**
+     * 入力途中の見出し語に基づき、動的補完（Suggestion）リストを更新します。
      */
     public void updateSuggestions() {
         if (mHeadword.length() == 0) {
             mSuggestionList = Collections.emptyList();
-            mService.hideCandidatesView();
+            if (mService != null) {
+                mService.hideCandidatesView();
+                mService.hideFloatingCandidates();
+            }
             return;
         }
 
@@ -891,17 +1697,165 @@ public class SKKEngine {
             query += mOkuriConsonant;
         }
 
-        List<String> list = mDictionary.findSuggestions(query);
+        List<String> list = (mDictionary != null) ? mDictionary.findSuggestions(query) : Collections.emptyList();
         if (!list.isEmpty()) {
             mSuggestionList = list;
             mCurrentSuggestionIndex = 0;
             // 漢字候補をクリアして補完リストを表示
-            mService.setCandidateObjects(null);
-            mService.setCandidates(list);
+            if (mService != null) {
+                mService.setCandidateObjects(null);
+                mService.setCandidates(list);
+                updateFloatingCandidates();
+            }
         } else {
             mSuggestionList = Collections.emptyList();
-            mService.hideCandidatesView();
+            if (mService != null) {
+                mService.hideCandidatesView();
+                mService.hideFloatingCandidates();
+            }
         }
+    }
+
+    /**
+     * 日付の動的候補リストを生成します。
+     */
+    private List<Candidate> generateDateCandidates(LocalDateTime dt) {
+        List<Candidate> list = new ArrayList<>();
+        list.add(createDynamicCand(dt.format(DateTimeFormatter.ofPattern("yyyy年M月d日"))));
+        list.add(createDynamicCand(dt.format(DateTimeFormatter.ofPattern("yyyy年M月d日(E)", Locale.JAPANESE))));
+        list.add(createDynamicCand(dt.format(DateTimeFormatter.ofPattern("yyyy/MM/dd"))));
+        list.add(createDynamicCand(dt.format(DateTimeFormatter.ofPattern("yyyy-MM-dd"))));
+        list.add(createDynamicCand(dt.format(DateTimeFormatter.ofPattern("yyyy.M.d"))));
+        list.add(createDynamicCand(dt.format(DateTimeFormatter.ofPattern("M月d日"))));
+
+        try {
+            JapaneseDate jDate = JapaneseDate.from(dt);
+            list.add(createDynamicCand(jDate.format(DateTimeFormatter.ofPattern("Gy年M月d日", Locale.JAPANESE))));
+            list.add(createDynamicCand(jDate.format(DateTimeFormatter.ofPattern("Gy年M月d日(E)", Locale.JAPANESE))));
+            list.add(createDynamicCand(jDate.format(DateTimeFormatter.ofPattern("GGGGGy.M.d", Locale.JAPANESE))));
+        } catch (Exception ignored) {
+        }
+        return list;
+    }
+
+    /**
+     * 時刻の動的候補リストを生成します。
+     */
+    private List<Candidate> generateTimeCandidates(LocalDateTime dt) {
+        List<Candidate> list = new ArrayList<>();
+        list.add(createDynamicCand(dt.format(DateTimeFormatter.ofPattern("H:mm"))));
+        list.add(createDynamicCand(dt.format(DateTimeFormatter.ofPattern("HH:mm:ss"))));
+        list.add(createDynamicCand(dt.format(DateTimeFormatter.ofPattern("H時m分"))));
+        list.add(createDynamicCand(dt.format(DateTimeFormatter.ofPattern("H時m分s秒"))));
+        list.add(createDynamicCand(dt.format(DateTimeFormatter.ofPattern("a h時m分", Locale.JAPANESE))));
+        list.add(createDynamicCand(dt.format(DateTimeFormatter.ofPattern("a h:mm", Locale.JAPANESE))));
+        list.add(createDynamicCand(dt.format(DateTimeFormatter.ofPattern("yyyy/MM/dd HH:mm"))));
+        return list;
+    }
+
+    /**
+     * キーワード（"today", "date", "now", "time" 等）に対応する動的候補を取得します。
+     *
+     * @param key キーワード
+     * @return 動的候補のリスト（該当なしの場合は空リスト）
+     */
+    public List<Candidate> getDynamicCandidates(String key) {
+        if (key == null) return Collections.emptyList();
+
+        List<Candidate> list = new ArrayList<>();
+        LocalDateTime now = LocalDateTime.now();
+
+        if (key.equalsIgnoreCase("today") || key.equalsIgnoreCase("date")) {
+            list.addAll(generateDateCandidates(now));
+
+        } else if (key.equalsIgnoreCase("tomorrow") || key.equalsIgnoreCase("tdate")) {
+            list.addAll(generateDateCandidates(now.plusDays(1)));
+
+        } else if (key.equalsIgnoreCase("yesterday") || key.equalsIgnoreCase("ydate")) {
+            list.addAll(generateDateCandidates(now.minusDays(1)));
+
+        } else if (key.equalsIgnoreCase("now") || key.equalsIgnoreCase("time")) {
+            list.addAll(generateTimeCandidates(now));
+
+        } else if (key.equalsIgnoreCase("year")) {
+            list.add(createDynamicCand(now.format(DateTimeFormatter.ofPattern("yyyy年"))));
+            list.add(createDynamicCand(now.format(DateTimeFormatter.ofPattern("yyyy"))));
+            try {
+                JapaneseDate jDate = JapaneseDate.from(now);
+                list.add(createDynamicCand(jDate.format(DateTimeFormatter.ofPattern("Gy年", Locale.JAPANESE))));
+            } catch (Exception ignored) {
+            }
+
+        } else if (key.equalsIgnoreCase("month")) {
+            list.add(createDynamicCand(now.format(DateTimeFormatter.ofPattern("M月"))));
+            list.add(createDynamicCand(now.format(DateTimeFormatter.ofPattern("MM月"))));
+
+        } else if (key.equalsIgnoreCase("day")) {
+            list.add(createDynamicCand(now.format(DateTimeFormatter.ofPattern("d日"))));
+            list.add(createDynamicCand(now.format(DateTimeFormatter.ofPattern("dd日"))));
+        }
+
+        return list;
+    }
+
+    /**
+     * Abbrev モードでの大文字・小文字のスタイルタイプ。
+     */
+    public enum Capitalization {
+        LOWER,
+        TITLE,
+        UPPER
+    }
+
+    /**
+     * 見出し語（Headword）の大文字・小文字スタイルを判定します。
+     *
+     * @param headword 入力された見出し語
+     * @return {@link Capitalization} の値
+     */
+    public static Capitalization getCapitalization(String headword) {
+        if (headword == null || headword.isEmpty()) {
+            return Capitalization.LOWER;
+        }
+        boolean hasUpper = false;
+        boolean hasLower = false;
+        for (int i = 0; i < headword.length(); i++) {
+            char c = headword.charAt(i);
+            if (Character.isUpperCase(c)) {
+                hasUpper = true;
+            } else if (Character.isLowerCase(c)) {
+                hasLower = true;
+            }
+        }
+        if (hasUpper && !hasLower) {
+            return Capitalization.UPPER;
+        }
+        if (Character.isUpperCase(headword.charAt(0))) {
+            return Capitalization.TITLE;
+        }
+        return Capitalization.LOWER;
+    }
+
+    /**
+     * 指定されたスタイルに従って候補文字列の大文字・小文字を自動変換します。
+     *
+     * @param text 変換対象の文字列
+     * @param cap  大文字スタイル
+     * @return 変換後の文字列
+     */
+    public static String applyCapitalization(String text, Capitalization cap) {
+        if (text == null || text.isEmpty() || cap == Capitalization.LOWER) {
+            return text;
+        }
+        if (cap == Capitalization.UPPER) {
+            return text.toUpperCase(Locale.ENGLISH);
+        }
+        if (cap == Capitalization.TITLE) {
+            if (Character.isLowerCase(text.charAt(0))) {
+                return Character.toUpperCase(text.charAt(0)) + text.substring(1);
+            }
+        }
+        return text;
     }
 
     /**
@@ -913,37 +1867,39 @@ public class SKKEngine {
     public boolean showDynamicCandidates(String key) {
         if (key == null) return false;
 
-        List<Candidate> list = new ArrayList<>();
-        LocalDateTime now = LocalDateTime.now();
+        List<Candidate> list = getDynamicCandidates(key);
 
-        if (key.equalsIgnoreCase("today") || key.equalsIgnoreCase("date")) {
-            // 日付バリエーション
-            list.add(createDynamicCand(now.format(DateTimeFormatter.ofPattern("yyyy年M月d日"))));
-            list.add(createDynamicCand(now.format(DateTimeFormatter.ofPattern("yyyy年M月d日(E)", Locale.JAPANESE))));
-            list.add(createDynamicCand(now.format(DateTimeFormatter.ofPattern("yyyy/MM/dd"))));
-            list.add(createDynamicCand(now.format(DateTimeFormatter.ofPattern("yyyy-MM-dd"))));
-            list.add(createDynamicCand(now.format(DateTimeFormatter.ofPattern("M月d日"))));
-
-            // 和暦 (令和等)
-            try {
-                JapaneseDate jDate = JapaneseDate.from(now);
-                list.add(createDynamicCand(jDate.format(DateTimeFormatter.ofPattern("Gy年M月d日", Locale.JAPANESE))));
-            } catch (Exception ignored) {
+        boolean isAbbrev = (mState == SKKStateAbbrev.INSTANCE || mState == SKKStateAbbrevConversion.INSTANCE);
+        if (isAbbrev && !key.isEmpty()) {
+            Capitalization cap = getCapitalization(key);
+            String headwordSelf = applyCapitalization(key, cap);
+            boolean exists = false;
+            for (Candidate c : list) {
+                if (c.candidate.equalsIgnoreCase(headwordSelf)) {
+                    exists = true;
+                    break;
+                }
             }
-
-        } else if (key.equalsIgnoreCase("now") || key.equalsIgnoreCase("time")) {
-            // 時刻バリエーション
-            list.add(createDynamicCand(now.format(DateTimeFormatter.ofPattern("H:mm"))));
-            list.add(createDynamicCand(now.format(DateTimeFormatter.ofPattern("HH:mm:ss"))));
-            list.add(createDynamicCand(now.format(DateTimeFormatter.ofPattern("H時m分"))));
-            list.add(createDynamicCand(now.format(DateTimeFormatter.ofPattern("yyyy/MM/dd HH:mm"))));
+            if (!exists) {
+                list.add(createDynamicCand(headwordSelf));
+            }
         }
 
         if (list.isEmpty()) {
             return false;
         }
 
-        changeState(SKKStateHeadwordConversion.INSTANCE);
+        if (isAbbrev) {
+            changeState(SKKStateAbbrevConversion.INSTANCE);
+            Capitalization cap = getCapitalization(key);
+            if (cap != Capitalization.LOWER) {
+                for (Candidate c : list) {
+                    c.candidate = applyCapitalization(c.candidate, cap);
+                }
+            }
+        } else {
+            changeState(SKKStateHeadwordConversion.INSTANCE);
+        }
         mCandidateList = list;
         mCurrentCandidateIndex = 0;
         updateCandidates();
@@ -1002,6 +1958,9 @@ public class SKKEngine {
             return;
         }
         mRegistrationStack.removeFirst();
+        if (mRegistrationStack.isEmpty() && mService != null) {
+            mService.hideRegistrationPopup();
+        }
         mHeadword.setLength(0);
         mHeadword.append(regInfo.key);
         mOkurigana = regInfo.okurigana;
@@ -1041,13 +2000,41 @@ public class SKKEngine {
             if (regInfo.okuriConsonant != null) {
                 key += regInfo.okuriConsonant;
             }
-            mDictionary.addEntry(key, entry, regInfo.okurigana);
+            if (mDictionary != null) {
+                mDictionary.addEntry(key, entry, regInfo.okurigana);
+            }
         }
 
         mRegistrationStack.removeFirst();
+
+        RegistrationInfo parentRegInfo = mRegistrationStack.peekFirst();
+        if (parentRegInfo != null) {
+            // 再帰登録時：親の単語登録バッファに完成した登録語を追加する
+            if (entry.length() > 0) {
+                parentRegInfo.entry.append(entry);
+            }
+        } else {
+            // 最外枠の単語登録完了時：確定した登録語をエディタにコミットする
+            if (mService != null) {
+                mService.hideRegistrationPopup();
+            }
+            if (entry.length() > 0) {
+                commitTextSKK(entry, 1);
+            }
+        }
+
         // 登録開始時のモードを復元する
         mMode = regInfo.mode;
         updateUI();
+    }
+
+    /**
+     * 現在の候補リストを取得します。
+     *
+     * @return 候補オブジェクトのリスト
+     */
+    public List<Candidate> getCandidateList() {
+        return mCandidateList;
     }
 
     /**
@@ -1075,12 +2062,51 @@ public class SKKEngine {
     }
 
     /**
+     * 現在選択されている変換候補をカタカナ（全角または半角）に変換して確定します。
+     *
+     * @param halfWidth 半角カタカナへ変換する場合は true、全角カタカナの場合は false
+     */
+    public void pickCurrentCandidateAsKatakana(boolean halfWidth) {
+        if (!mState.isConverting() || mCurrentCandidateIndex < 0 || mCurrentCandidateIndex >= mCandidateList.size()) {
+            return;
+        }
+
+        Candidate c = mCandidateList.get(mCurrentCandidateIndex);
+        String candidateStr = c.candidate;
+        if (mOkurigana != null) {
+            candidateStr = candidateStr + mOkurigana;
+        }
+        String converted = halfWidth ? RomajiConverter.toHalfKatakana(candidateStr)
+                : RomajiConverter.toWideKatakana(candidateStr);
+        commitTextSKK(converted, 1);
+        if (mRemainingHeadword != null) {
+            String remaining = mRemainingHeadword;
+            mRemainingHeadword = null;
+            mHeadword.setLength(0);
+            mHeadword.append(remaining);
+            mOkurigana = null;
+            mOkuriConsonant = null;
+            resetHeadwordCursor();
+            changeState(SKKStateHeadword.INSTANCE);
+        } else {
+            changeState(SKKStateDirect.INSTANCE);
+        }
+    }
+
+    /**
      * 指定されたインデックスの候補を確定し、学習情報を反映させます。
      *
      * @param index 候補のインデックス
      */
     public void pickCandidate(int index) {
-        if (!mState.isConverting() || index < 0 || index >= mCandidateList.size()) {
+        if (!mState.isConverting()) {
+            return;
+        }
+        if (index < 0 || index >= mCandidateList.size()) {
+            if (mCandidateList.isEmpty()) {
+                reset();
+                changeState(SKKStateDirect.INSTANCE);
+            }
             return;
         }
 
@@ -1117,7 +2143,19 @@ public class SKKEngine {
                     isAbbrevChoose,
                     mMode);
         }
-        changeState(SKKStateDirect.INSTANCE);
+
+        if (mRemainingHeadword != null) {
+            String remaining = mRemainingHeadword;
+            mRemainingHeadword = null;
+            mHeadword.setLength(0);
+            mHeadword.append(remaining);
+            mOkurigana = null;
+            mOkuriConsonant = null;
+            resetHeadwordCursor();
+            changeState(SKKStateHeadword.INSTANCE);
+        } else {
+            changeState(SKKStateDirect.INSTANCE);
+        }
     }
 
     /**
@@ -1166,6 +2204,7 @@ public class SKKEngine {
             }
             updateCandidates();
             mService.requestChooseCandidate(mCurrentCandidateIndex);
+            updateFloatingCandidates();
         }
         updateComposingText();
     }
@@ -1212,6 +2251,9 @@ public class SKKEngine {
     public void reset() {
         clearBuffers();
         mRegistrationStack.clear();
+        if (mService != null) {
+            mService.hideRegistrationPopup();
+        }
     }
 
     /**
@@ -1221,6 +2263,8 @@ public class SKKEngine {
     public void clearBuffers() {
         mConverter.reset();
         mHeadword.setLength(0);
+        resetHeadwordCursor();
+        mRemainingHeadword = null;
         mOkurigana = null;
         mOkuriConsonant = null;
         clearCandidates();
@@ -1235,7 +2279,10 @@ public class SKKEngine {
         mSuggestionList = Collections.emptyList();
         mCurrentCandidateIndex = 0;
         mCurrentSuggestionIndex = 0;
-        mService.hideCandidatesView();
+        if (mService != null) {
+            mService.hideCandidatesView();
+            mService.hideFloatingCandidates();
+        }
     }
 
     /**
@@ -1253,18 +2300,6 @@ public class SKKEngine {
         updateUI();
     }
 
-    /**
-     * 入力状態を変更せずに、入力モードのみを変更します。
-     * <p>
-     * ▽モード（見出し語入力中）での一時的なモード変更などに使用されます。
-     * </p>
-     *
-     * @param mode 新しいモード
-     */
-    public void setMode(SKKMode mode) {
-        mMode = mode;
-        updateUI();
-    }
 
     /**
      * 入力状態を変更します。
@@ -1304,7 +2339,9 @@ public class SKKEngine {
      * アイコンやツールチップなどのUI表示を更新します。
      */
     private void updateUI() {
-        mService.requestUIUpdate();
+        if (mService != null) {
+            mService.requestUIUpdate();
+        }
     }
 
     /**

@@ -8,6 +8,8 @@ import org.json.JSONObject;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import io.github.kachaya.skk.AssetLoader;
 
@@ -24,33 +26,64 @@ public class RomajiConverter {
     private static Map<Character, String> halfWidthKatakanaMap;
 
     public static synchronized void load(Context context) {
-        if (romajiMap != null && halfWidthKatakanaMap != null) return;
+        if (romajiMap != null && !romajiMap.isEmpty() && halfWidthKatakanaMap != null && !halfWidthKatakanaMap.isEmpty()) return;
 
-        romajiMap = new RomajiMap();
-        JSONArray romajiArray = AssetLoader.loadJsonArray(context, "romaji_table.json");
-        if (romajiArray != null) {
-            for (int i = 0; i < romajiArray.length(); i++) {
-                JSONObject obj = romajiArray.optJSONObject(i);
-                if (obj != null) {
-                    String key = obj.optString("key");
-                    String value = obj.optString("value");
-                    String next = obj.has("next") ? obj.optString("next") : null;
-                    romajiMap.put(key, value, next);
+        RomajiMap map = new RomajiMap();
+        String jsonStr = AssetLoader.loadAssetString(context, "romaji_table.json");
+        if (jsonStr != null) {
+            try {
+                JSONArray romajiArray = new JSONArray(jsonStr);
+                for (int i = 0; i < romajiArray.length(); i++) {
+                    JSONObject obj = romajiArray.optJSONObject(i);
+                    if (obj != null) {
+                        String key = obj.optString("key");
+                        String value = obj.optString("value");
+                        String next = obj.has("next") ? obj.optString("next") : null;
+                        if (!key.isEmpty()) {
+                            map.put(key, value, next);
+                        }
+                    }
+                }
+            } catch (Exception ignored) {
+            }
+
+            if (map.isEmpty()) {
+                Pattern pattern = Pattern.compile(
+                        "\\{\\s*\"key\"\\s*:\\s*\"([^\"]+)\"\\s*,\\s*\"value\"\\s*:\\s*\"([^\"]*)\"(?:\\s*,\\s*\"next\"\\s*:\\s*\"([^\"]+)\")?\\s*\\}"
+                );
+                Matcher matcher = pattern.matcher(jsonStr);
+                while (matcher.find()) {
+                    String key = matcher.group(1);
+                    String value = matcher.group(2);
+                    String next = matcher.group(3);
+                    map.put(key, value, next);
                 }
             }
         }
+        romajiMap = map;
+        romajiMap.put(".", "。");
+        romajiMap.put(",", "、");
 
-        halfWidthKatakanaMap = new HashMap<>();
+        Map<Character, String> kanaMap = new HashMap<>();
         JSONObject kanaObj = AssetLoader.loadJsonObject(context, "kana_map.json");
         if (kanaObj != null) {
             Iterator<String> keys = kanaObj.keys();
-            while (keys.hasNext()) {
-                String full = keys.next();
-                String half = kanaObj.optString(full);
-                if (full.length() > 0) {
-                    halfWidthKatakanaMap.put(full.charAt(0), half);
+            if (keys != null) {
+                while (keys.hasNext()) {
+                    String full = keys.next();
+                    String half = kanaObj.optString(full);
+                    if (full.length() > 0) {
+                        kanaMap.put(full.charAt(0), half);
+                    }
                 }
             }
+        }
+        halfWidthKatakanaMap = kanaMap;
+    }
+
+    public static synchronized void setSeparator(String key, String value) {
+        if (romajiMap != null) {
+            romajiMap.put(key, value);
         }
     }
 
@@ -205,9 +238,25 @@ public class RomajiConverter {
      * @param code 入力されたキーの Unicode コードポイント
      */
     public void processKey(int code) {
+        if (code == ' ') {
+            if (hasComposing()) {
+                flush();
+            }
+            mEngine.commitRomajiText(" ", ' ', false);
+            return;
+        }
+
         boolean isUpper = (code >= 'A' && code <= 'Z');
         if (isUpper) {
             code = Character.toLowerCase(code);
+        }
+
+        if (Character.isDigit(code)) {
+            if (hasComposing()) {
+                flush();
+            }
+            mEngine.commitRomajiText(String.valueOf((char) code), (char) code, isUpper);
+            return;
         }
 
         mComposing.append((char) code);
@@ -218,12 +267,24 @@ public class RomajiConverter {
             RomajiMap.Node node = romajiMap.prefixSearch(current);
 
             if (node == null) {
-                // ローマ字表にないシーケンスの場合は、先頭の1文字をそのまま確定として放出
-                mEngine.commitRomajiText(current.substring(0, 1), initialChar, isUpper);
-                mComposing.delete(0, 1);
-                isUpper = false;
-                mShiftSent = false;
-                continue;
+                // ローマ字表にないシーケンスの場合、拡張コマンド（/やq、l等）として処理できるか試みる
+                String singleChar = current.substring(0, 1);
+                if (mEngine.processRomajiExtension(singleChar, isUpper)) {
+                    mComposing.delete(0, 1);
+                    isUpper = false;
+                    mShiftSent = false;
+                    continue;
+                }
+                // 大文字（Shift押下による見出し語入力トリガー等）の場合は、自動確定して放出する
+                if (isUpper) {
+                    mEngine.commitRomajiText(singleChar, initialChar, true);
+                    mComposing.delete(0, 1);
+                    isUpper = false;
+                    mShiftSent = false;
+                    continue;
+                }
+                // 拡張コマンドでもなく大文字でもなくローマ字表にもない場合は、自動確定せずそのままバッファに残す
+                break;
             }
 
             if (node.getKey().length() == current.length()) {
@@ -266,16 +327,8 @@ public class RomajiConverter {
                     continue;
                 } else {
                     // 中間一致のルールから外れた場合（例: "kx" で "k" は中間一致だが "kx" は不適合）
-                    // 一致していた部分（英字）を放出してバッファを詰める
-                    boolean commitUpper = false;
-                    if (mShiftSent) {
-                        commitUpper = true;
-                        mShiftSent = false;
-                    }
-                    mEngine.commitRomajiText(node.getKey(), initialChar, commitUpper);
-                    mComposing.delete(0, node.getKey().length());
-                    isUpper = false;
-                    continue;
+                    // ひらがなにならない部分を自動的に確定するのをやめてそのまま残す
+                    break;
                 }
             }
         }

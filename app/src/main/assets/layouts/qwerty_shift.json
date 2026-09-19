@@ -48,7 +48,7 @@
   ],
   [
     { "label": "Ctrl", "code": "CTRL", "weight": 1.5 },
-    { "label": "Sym", "code": "SYM" },
+    { "label": "@!?", "code": "SYM" },
     { "label": "<" },
     { "label": "⌴", "code": "SPACE", "weight": 2.0 },
     { "label": ">" },

@@ -77,24 +77,24 @@ public enum SKKStateHeadword implements SKKState {
      * Ctrlキーと同時押しのキー入力を処理します。
      * 補完候補の選択（Ctrl-I）や、入力を 1 文字削除（Ctrl-W）する操作を処理します。
      * 見出し語入力中は、モード側によるカーソル移動をブロックします。
-     *
      * @param context SKKエンジンのコンテキスト
-     * @param keyCode キーコード
+     * @param action  割り当てられている CtrlAction
      * @return イベントを消費した場合は true
      */
     @Override
-    public boolean processCtrlKey(SKKEngine context, int keyCode) {
-        switch (keyCode) {
-            case KeyEvent.KEYCODE_Q:
-                SKKMode nextMode = context.getToggledKanaMode();
-                if (nextMode != null) {
-                    context.setMode(nextMode);
-                }
+    public boolean processCtrlKey(SKKEngine context, CtrlAction action) {
+        switch (action) {
+            case TOGGLE_KANA:
+                context.toggleKana();
                 return true;
-            case KeyEvent.KEYCODE_W:
-                // DDSKK 仕様: Ctrl-W で見出し語の 1 文字削除 (Backspace 相当)
+            case DELETE_CHAR:
+                // DDSKK 仕様: 見出し語の 1 文字削除 (Backspace 相当)
                 return context.handleBackspace();
-            case KeyEvent.KEYCODE_I:
+            case KILL_LINE_BACKWARD:
+                return context.killHeadwordToLineStart();
+            case KILL_WORD_BACKWARD:
+                return context.killWordHeadwordBackward();
+            case COMPLETION:
                 // 明示的な補完開始
                 if (context.getSuggestionList() == null || context.getSuggestionList().isEmpty()) {
                     context.updateSuggestions();
@@ -102,18 +102,43 @@ public enum SKKStateHeadword implements SKKState {
                     context.chooseAdjacentSuggestion(true);
                 }
                 return true;
-            case KeyEvent.KEYCODE_J:
+            case KANA_KEY:
                 context.handleKanaKey();
                 return true;
-            case KeyEvent.KEYCODE_G:
+            case CANCEL:
                 return context.handleCancel();
-
-            // カーソル移動のガード: 見出し語入力中はエディタのカーソル移動を抑制する
-            case KeyEvent.KEYCODE_P:
-            case KeyEvent.KEYCODE_N:
-            case KeyEvent.KEYCODE_B:
-            case KeyEvent.KEYCODE_F:
+            case TOGGLE_EN_JP:
+                context.toggleEnglishJapanese();
                 return true;
+            case LAUNCH_SETTINGS:
+                context.launchSettings();
+                return true;
+            case OPEN_EMOJI:
+                context.openEmojiPicker();
+                return true;
+
+            // カーソル移動・編集の処理: 見出し語（▽）内でのカーソル移動と編集を行う
+            case CURSOR_LEFT:
+                context.moveHeadwordCursor(-1);
+                return true;
+            case CURSOR_RIGHT:
+                context.moveHeadwordCursor(1);
+                return true;
+            case LINE_START:
+                context.setHeadwordCursor(0);
+                return true;
+            case LINE_END:
+                context.setHeadwordCursor(context.getHeadword().length());
+                return true;
+            case FORWARD_DELETE:
+                return context.deleteHeadwordCharAfterCursor();
+            case KILL_LINE:
+                return context.killHeadwordToLineEnd();
+            case CURSOR_UP:
+            case CURSOR_DOWN:
+                return true;
+            default:
+                break;
         }
         return false;
     }
@@ -160,6 +185,13 @@ public enum SKKStateHeadword implements SKKState {
      */
     @Override
     public boolean processDpad(SKKEngine context, int keyCode) {
+        if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
+            context.moveHeadwordCursor(-1);
+            return true;
+        } else if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
+            context.moveHeadwordCursor(1);
+            return true;
+        }
         return true;
     }
 
@@ -186,6 +218,7 @@ public enum SKKStateHeadword implements SKKState {
     @Override
     public void onEnterState(SKKEngine context) {
         context.clearCandidates();
+        context.resetHeadwordCursor();
     }
 
     @Override
@@ -229,8 +262,12 @@ public enum SKKStateHeadword implements SKKState {
             return true;
         }
 
-        switch (text) {
-            case "q": // DDSKK 仕様: 見出し語入力中に q でカタカナ変換確定
+        if ("q".equals(text)) { // DDSKK 仕様: 見出し語入力中に q でカタカナ変換確定 / Q で送り仮名待ちへ
+            if (isUpper) {
+                context.setOkuriConsonant(null);
+                context.setOkurigana(null);
+                context.changeState(SKKStateOkurigana.INSTANCE);
+            } else {
                 // 選択中の補完候補（Suggestion）があればそれを採用
                 String suggestion = context.getCurrentSuggestion();
                 if (suggestion != null) {
@@ -238,7 +275,8 @@ public enum SKKStateHeadword implements SKKState {
                     context.getHeadword().append(suggestion);
                 }
                 toggleKana(context);
-                return true;
+            }
+            return true;
         }
         return false;
     }
@@ -262,14 +300,19 @@ public enum SKKStateHeadword implements SKKState {
             return;
         }
         if (isUpper) {
-            context.setOkuriConsonant(null);
-            context.setOkurigana(null);
-            context.changeState(SKKStateOkurigana.INSTANCE);
-            SKKStateOkurigana.INSTANCE.processText(context, text, initial, false);
+            if (context.getHeadword().length() == 0) {
+                if (text != null) {
+                    context.insertHeadwordText(text);
+                }
+            } else {
+                context.setOkuriConsonant(null);
+                context.setOkurigana(null);
+                context.changeState(SKKStateOkurigana.INSTANCE);
+                SKKStateOkurigana.INSTANCE.processText(context, text, initial, false);
+            }
         } else {
             if (text != null) {
-                StringBuilder headword = context.getHeadword();
-                headword.append(text);
+                context.insertHeadwordText(text);
             }
         }
     }
@@ -288,13 +331,7 @@ public enum SKKStateHeadword implements SKKState {
      */
     @Override
     public boolean processBackspace(SKKEngine context) {
-        StringBuilder headword = context.getHeadword();
-        int len = headword.length();
-        if (len > 0) {
-            headword.deleteCharAt(len - 1);
-            return true;
-        }
-        return false;
+        return context.deleteHeadwordCharBeforeCursor();
     }
 
     @Override

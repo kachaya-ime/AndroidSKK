@@ -3,22 +3,31 @@ package io.github.kachaya.skk.keyboard;
 import android.content.ClipData;
 import android.content.ClipDescription;
 import android.content.Intent;
+import android.graphics.Color;
 import android.net.Uri;
 import android.os.Bundle;
+import android.text.InputType;
+import android.util.TypedValue;
 import android.view.DragEvent;
+import android.view.Gravity;
 import android.view.HapticFeedbackConstants;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.AdapterView;
+import android.widget.ArrayAdapter;
 import android.widget.Button;
+import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.RadioGroup;
+import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
+import androidx.appcompat.app.ActionBar;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.preference.PreferenceManager;
@@ -102,6 +111,11 @@ public class KeyboardCustomizerActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         loadDefaultLayouts();
         setContentView(R.layout.activity_keyboard_customizer);
+
+        ActionBar actionBar = getSupportActionBar();
+        if (actionBar != null) {
+            actionBar.setDisplayHomeAsUpEnabled(true);
+        }
 
         Intent intent = getIntent();
         mTargetPrefKey = intent.getStringExtra(EXTRA_PREF_KEY);
@@ -196,7 +210,10 @@ public class KeyboardCustomizerActivity extends AppCompatActivity {
     @Override
     public boolean onOptionsItemSelected(MenuItem item) {
         int id = item.getItemId();
-        if (id == R.id.action_save) {
+        if (id == android.R.id.home) {
+            finish();
+            return true;
+        } else if (id == R.id.action_save) {
             saveLayout();
             return true;
         } else if (id == R.id.action_backup) {
@@ -291,8 +308,8 @@ public class KeyboardCustomizerActivity extends AppCompatActivity {
             if (rowConfigs.length == 0) {
                 TextView tv = new TextView(this);
                 tv.setText("ここへキーをドラッグして追加");
-                tv.setTextColor(android.graphics.Color.LTGRAY);
-                tv.setGravity(android.view.Gravity.CENTER);
+                tv.setTextColor(Color.LTGRAY);
+                tv.setGravity(Gravity.CENTER);
                 tv.setLayoutParams(new LinearLayout.LayoutParams(
                         ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
                 tv.setTag("placeholder");
@@ -336,21 +353,21 @@ public class KeyboardCustomizerActivity extends AppCompatActivity {
             // GAPキーの表示（編集画面用）
             TextView tv = new TextView(this);
             tv.setText("Gap");
-            tv.setGravity(android.view.Gravity.CENTER);
-            tv.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, 10);
+            tv.setGravity(Gravity.CENTER);
+            tv.setTextSize(TypedValue.COMPLEX_UNIT_SP, 10);
 
             if (isInKeyboard) {
                 LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, config.weight);
                 tv.setLayoutParams(lp);
-                tv.setBackgroundColor(android.graphics.Color.LTGRAY);
-                tv.setTextColor(android.graphics.Color.GRAY);
+                tv.setBackgroundColor(Color.LTGRAY);
+                tv.setTextColor(Color.GRAY);
                 tv.setAlpha(0.6f);
             } else {
                 FlexboxLayout.LayoutParams lp = new FlexboxLayout.LayoutParams(paletteItemWidth, (int) getResources().getDimension(R.dimen.button_height));
                 lp.setMargins(paletteMargin, paletteMargin, paletteMargin, paletteMargin);
                 tv.setLayoutParams(lp);
-                tv.setBackgroundColor(android.graphics.Color.DKGRAY);
-                tv.setTextColor(android.graphics.Color.WHITE);
+                tv.setBackgroundColor(Color.DKGRAY);
+                tv.setTextColor(Color.WHITE);
             }
             view = tv;
         } else {
@@ -366,10 +383,10 @@ public class KeyboardCustomizerActivity extends AppCompatActivity {
                 b.setAlpha(1.0f);
                 if (mUsedChars.contains(config.label)) {
                     // すでにレイアウトにある文字は、明るい白
-                    b.setTextColor(android.graphics.Color.WHITE);
+                    b.setTextColor(Color.WHITE);
                 } else {
                     // 未配置のキーは、グレー
-                    b.setTextColor(android.graphics.Color.GRAY);
+                    b.setTextColor(Color.GRAY);
                 }
 
                 FlexboxLayout.LayoutParams lp = new FlexboxLayout.LayoutParams(paletteItemWidth, (int) getResources().getDimension(R.dimen.button_height));
@@ -429,12 +446,12 @@ public class KeyboardCustomizerActivity extends AppCompatActivity {
             configProvider = createFunctionalField(layout, config);
         }
 
-        android.widget.EditText editWeight = createField(layout, "ウェイト (1.0標準)", String.valueOf(config.weight));
-        editWeight.setInputType(android.text.InputType.TYPE_CLASS_NUMBER | android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL);
+        EditText editWeight = createField(layout, "ウェイト (1.0標準)", String.valueOf(config.weight));
+        editWeight.setInputType(InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_FLAG_DECIMAL);
 
         final KeyConfigProvider finalProvider = configProvider;
 
-        new androidx.appcompat.app.AlertDialog.Builder(this)
+        new AlertDialog.Builder(this)
                 .setTitle(isGap ? "GAPの調整" : "キーの編集")
                 .setView(layout)
                 .setPositiveButton("OK", (dialog, which) -> {
@@ -470,15 +487,15 @@ public class KeyboardCustomizerActivity extends AppCompatActivity {
         LinearLayout row = new LinearLayout(this);
         row.setOrientation(LinearLayout.HORIZONTAL);
 
-        android.widget.Spinner spinner = new android.widget.Spinner(this);
-        String[] funcLabels = {"(文字入力)", "Shift", "Enter", "Backspace", "Space", "Sym", "Ctrl", "Tab", "左移動", "右移動", "上移動", "下移動"};
-        int[] funcCodes = {KeyConfig.CODE_NONE, KeyConfig.CODE_SHIFT, KeyConfig.CODE_ENTER, KeyConfig.CODE_BACKSPACE, KeyConfig.CODE_SPACE, KeyConfig.CODE_SYM, KeyConfig.CODE_CTRL, KeyConfig.CODE_TAB, KeyConfig.CODE_LEFT, KeyConfig.CODE_RIGHT, KeyConfig.CODE_UP, KeyConfig.CODE_DOWN};
+        Spinner spinner = new Spinner(this);
+        String[] funcLabels = {"(文字入力)", "Shift", "Enter", "Backspace", "Space", "@!?", "Ctrl", "Tab", "左移動", "右移動", "上移動", "下移動", "abc"};
+        int[] funcCodes = {KeyConfig.CODE_NONE, KeyConfig.CODE_SHIFT, KeyConfig.CODE_ENTER, KeyConfig.CODE_BACKSPACE, KeyConfig.CODE_SPACE, KeyConfig.CODE_SYM, KeyConfig.CODE_CTRL, KeyConfig.CODE_TAB, KeyConfig.CODE_LEFT, KeyConfig.CODE_RIGHT, KeyConfig.CODE_UP, KeyConfig.CODE_DOWN, KeyConfig.CODE_ABC};
 
-        android.widget.ArrayAdapter<String> adapter = new android.widget.ArrayAdapter<>(this, android.R.layout.simple_spinner_item, funcLabels);
+        ArrayAdapter<String> adapter = new ArrayAdapter<>(this, android.R.layout.simple_spinner_item, funcLabels);
         adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
         spinner.setAdapter(adapter);
 
-        android.widget.EditText etLabel = new android.widget.EditText(this);
+        EditText etLabel = new EditText(this);
         etLabel.setLayoutParams(new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1.0f));
         etLabel.setHint("表示ラベル");
         etLabel.setText(config.label);
@@ -496,11 +513,11 @@ public class KeyboardCustomizerActivity extends AppCompatActivity {
 
         // 機能が選択された時に、デフォルトのラベルをセットする
         final int[] finalCodes = funcCodes;
-        spinner.setOnItemSelectedListener(new android.widget.AdapterView.OnItemSelectedListener() {
+        spinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
             private boolean isInitial = true;
 
             @Override
-            public void onItemSelected(android.widget.AdapterView<?> parent, android.view.View view, int position, long id) {
+            public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
                 if (isInitial) {
                     isInitial = false;
                     return;
@@ -515,7 +532,7 @@ public class KeyboardCustomizerActivity extends AppCompatActivity {
             }
 
             @Override
-            public void onNothingSelected(android.widget.AdapterView<?> parent) {
+            public void onNothingSelected(AdapterView<?> parent) {
             }
         });
 
@@ -530,12 +547,12 @@ public class KeyboardCustomizerActivity extends AppCompatActivity {
         };
     }
 
-    private android.widget.EditText createField(LinearLayout container, String label, String value) {
+    private EditText createField(LinearLayout container, String label, String value) {
         TextView tv = new TextView(this);
         tv.setText(label);
         tv.setTextSize(12);
         container.addView(tv);
-        android.widget.EditText et = new android.widget.EditText(this);
+        EditText et = new EditText(this);
         et.setText(value);
         container.addView(et);
         return et;
@@ -704,6 +721,9 @@ public class KeyboardCustomizerActivity extends AppCompatActivity {
         return layout;
     }
 
+    /**
+     * レイアウトを標準のデフォルト状態にリセットします。
+     */
     private void resetToDefault() {
         new AlertDialog.Builder(this)
                 .setTitle("レイアウトの初期化")
@@ -740,6 +760,11 @@ public class KeyboardCustomizerActivity extends AppCompatActivity {
                 .show();
     }
 
+    /**
+     * キーボードレイアウトを JSON ファイルにバックアップします。
+     *
+     * @param uri 保存先の URI
+     */
     private void backupLayout(Uri uri) {
         if (uri == null) return;
         try (OutputStream os = getContentResolver().openOutputStream(uri, "wt")) {
@@ -763,6 +788,11 @@ public class KeyboardCustomizerActivity extends AppCompatActivity {
         }
     }
 
+    /**
+     * JSON ファイルからキーボードレイアウトを復元します。
+     *
+     * @param uri 読み込み元の URI
+     */
     private void restoreLayout(Uri uri) {
         if (uri == null) return;
         try (InputStream is = getContentResolver().openInputStream(uri);
@@ -795,6 +825,9 @@ public class KeyboardCustomizerActivity extends AppCompatActivity {
         }
     }
 
+    /**
+     * ドラッグ＆ドロップによるキー配置変更・挿入位置のリアルタイムプレビューを制御するリスナーです。
+     */
     private class RowDragListener implements View.OnDragListener {
         @Override
         public boolean onDrag(View v, DragEvent event) {

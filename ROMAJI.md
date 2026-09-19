@@ -29,9 +29,10 @@ AndroidSKK で使用可能なローマ字かな変換表です。
 |:-|:-|:-|:-|:-|:-|
 | **きゃ行** | kya (きゃ) | kyi (きぃ) | kyu (きゅ) | kye (きぇ) | kyo (きょ) |
 | **ぎゃ行** | gya (ぎゃ) | gyi (ぎぃ) | gyu (ぎゅ) | gye (ぎぇ) | gyo (ぎょ) |
-| **しゃ行** | sha, sya (しゃ) | syi (しぃ) | shu, syu (しゅ) | she, sye (しぇ) | sho, syo (しょ) |
-| **じゃ行** | ja, zya (じゃ) | zyi (じぃ) | ju, zyu (じゅ) | je, zye (じぇ) | jo, zyo (じょ) |
-| **ちゃ行** | cha, tya, cya (ちゃ) | cyi, tyi (ちぃ) | chu, tyu, cyu (ちゅ) | che, tye, cye (ちぇ) | cho, tyo, cyo (ちょ) |
+| **しゃ行** | sha, sya, shya (しゃ) | syi, shyi (しぃ) | shu, syu, shyu (しゅ) | she, sye, shye (しぇ) | sho, syo, shyo (しょ) |
+| **じゃ行** | ja, zya, jya (じゃ) | zyi, jyi (じぃ) | ju, zyu, jyu (じゅ) | je, zye, jye (じぇ) | jo, zyo, jyo (じょ) |
+| **ちゃ行** | cha, tya, cya, chya (ちゃ) | cyi, tyi, chyi (ちぃ) | chu, tyu, cyu, chyu (ちゅ) | che, tye, cye, chye (ちぇ) | cho, tyo, cyo, chyo (ちょ) |
+| **ぢゃ行** | dya (ぢゃ) | dyi (ぢぃ) | dyu (ぢゅ) | dye (ぢぇ) | dyo (ぢょ) |
 | **にゃ行** | nya (にゃ) | nyi (にぃ) | nyu (にゅ) | nye (にぇ) | nyo (にょ) |
 | **ひゃ行** | hya (ひゃ) | hyi (ひぃ) | hyu (ひゅ) | hye (ひぇ) | hyo (ひょ) |
 | **びゃ行** | bya (びゃ) | byi (びぃ) | byu (びゅ) | bye (びぇ) | byo (びょ) |
@@ -46,7 +47,7 @@ AndroidSKK で使用可能なローマ字かな変換表です。
 | **x + 母音** | xa (ぁ) | xi (ぃ) | xu (ぅ) | xe (ぇ) | xo (ぉ) |
 | **xy 行** | xya (ゃ) | xyi (ぃ) | xyu (ゅ) | xye (ぇ) | xyo (ょ) |
 | **その他** | xka (ヵ) | | | xke (ヶ) | |
-| | xwa (ゎ) | | | | |
+| | xwa (ゎ) | xtu, xtsu (っ) | | | |
 
 ## 特殊な組み合わせ
 
@@ -56,11 +57,15 @@ AndroidSKK で使用可能なローマ字かな変換表です。
 | **でゃ行** | dha (でゃ) | dhi (でぃ) | dhu (でゅ) | dhe (でぇ) | dho (でょ) |
 | **とぁ行** | twa (とぁ) | twi (とぃ) | twu (とぅ) | twe (とぇ) | two (とぉ) |
 | **どぁ行** | dwa (どぁ) | dwi (どぃ) | dwu (どぅ) | dwe (どぇ) | dwo (どぉ) |
-| **ふぁ行** | fa (ふぁ) | fi (ふぃ) | fu (ふ) | fe (ふぇ) | fo (ふぉ) |
+| **ふぁ行** | fa, fwa (ふぁ) | fi, fwi (ふぃ) | fu, fwu (ふ/ふぅ) | fe, fwe (ふぇ) | fo, fwo (ふぉ) |
+| **ふゃ行** | fya (ふゃ) | fyi (ふぃ) | fyu (ふゅ) | fye (ふぇ) | fyo (ふょ) |
+| **ゔぁ行** | va, vwa (ゔぁ) | vi, vwi (ゔぃ) | vu, vwu (ゔ/ゔぅ) | ve, vwe (ゔぇ) | vo, vwo (ゔぉ) |
+| **ゔゃ行** | vya (ゔゃ) | vyi (ゔぃ) | vyu (ゔゅ) | vye (ゔぇ) | vyo (ゔょ) |
 | **くぁ行** | kwa (くぁ) | kwi (くぃ) | kwu (くぅ) | kwe (くぇ) | kwo (くぉ) |
 | **ぐぁ行** | gwa (ぐぁ) | gwi (ぐぃ) | gwu (ぐぅ) | gwe (ぐぇ) | gwo (ぐぉ) |
 | **すぁ行** | swa (すぁ) | swi (すぃ) | swu (すぅ) | swe (すぇ) | swo (すぉ) |
 | **うぁ行** | wha (うぁ) | whi (うぃ) | whu (う) | whe (うぇ) | who (うぉ) |
+| **つぁ行** | tsa (つぁ) | tsi (つぃ) | tsu (つ) | tse (つぇ) | tso (つぉ) |
 
 ## zから始まる全角記号・特殊入力
 

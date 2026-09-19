@@ -1,9 +1,11 @@
 package io.github.kachaya.skk;
 
 import android.annotation.SuppressLint;
+import android.app.Dialog;
+import android.content.Context;
 import android.content.SharedPreferences;
+import android.content.res.Configuration;
 import android.graphics.Matrix;
-import android.graphics.RectF;
 import android.graphics.drawable.ColorDrawable;
 import android.inputmethodservice.InputMethodService;
 import android.os.Handler;
@@ -23,14 +25,21 @@ import android.widget.PopupWindow;
 import android.widget.TextView;
 import android.widget.ViewFlipper;
 
+import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowInsetsCompat;
 import androidx.preference.PreferenceManager;
 
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 import io.github.kachaya.skk.engine.Candidate;
 import io.github.kachaya.skk.engine.Dictionary;
 import io.github.kachaya.skk.engine.SKKEngine;
 import io.github.kachaya.skk.engine.SKKIcon;
+import io.github.kachaya.skk.engine.SKKModeFullHiragana;
 
 /**
  * SKK 入力メソッドのメインサービス実装です。
@@ -44,6 +53,8 @@ public class InputService extends InputMethodService implements SharedPreference
 
     /** ツールチップ消去用のタイマー制御ハンドラ。 */
     private final Handler mHideHandler = new Handler(Looper.getMainLooper());
+    /** システムに転送中の Ctrl キーコードセット。 */
+    private final Set<Integer> mForwardedCtrlKeys = new HashSet<>();
     /** 変換エンジン。状態遷移やローマ字かな変換のメインロジックを保持します。 */
     private SKKEngine mEngine;
 
@@ -56,15 +67,50 @@ public class InputService extends InputMethodService implements SharedPreference
     /** 共有設定の参照。リスナーがガベージコレクションされないよう強参照で保持します。 */
     private SharedPreferences mPrefs;
 
+    static final Map<Integer, Character> JIS_NORMAL_MAP = new HashMap<>();
+    static final Map<Integer, Character> JIS_SHIFTED_MAP = new HashMap<>();
+
+    static {
+        JIS_NORMAL_MAP.put(KeyEvent.KEYCODE_EQUALS, '^');
+        JIS_NORMAL_MAP.put(KeyEvent.KEYCODE_LEFT_BRACKET, '@');
+        JIS_NORMAL_MAP.put(KeyEvent.KEYCODE_RIGHT_BRACKET, '[');
+        JIS_NORMAL_MAP.put(KeyEvent.KEYCODE_APOSTROPHE, ':');
+        JIS_NORMAL_MAP.put(KeyEvent.KEYCODE_BACKSLASH, ']');
+        JIS_NORMAL_MAP.put(KeyEvent.KEYCODE_YEN, '¥');
+        JIS_NORMAL_MAP.put(KeyEvent.KEYCODE_RO, '\\');
+
+        JIS_SHIFTED_MAP.put(KeyEvent.KEYCODE_2, '"');
+        JIS_SHIFTED_MAP.put(KeyEvent.KEYCODE_6, '&');
+        JIS_SHIFTED_MAP.put(KeyEvent.KEYCODE_7, '\'');
+        JIS_SHIFTED_MAP.put(KeyEvent.KEYCODE_8, '(');
+        JIS_SHIFTED_MAP.put(KeyEvent.KEYCODE_9, ')');
+        JIS_SHIFTED_MAP.put(KeyEvent.KEYCODE_MINUS, '=');
+        JIS_SHIFTED_MAP.put(KeyEvent.KEYCODE_EQUALS, '~');
+        JIS_SHIFTED_MAP.put(KeyEvent.KEYCODE_LEFT_BRACKET, '`');
+        JIS_SHIFTED_MAP.put(KeyEvent.KEYCODE_RIGHT_BRACKET, '{');
+        JIS_SHIFTED_MAP.put(KeyEvent.KEYCODE_SEMICOLON, '+');
+        JIS_SHIFTED_MAP.put(KeyEvent.KEYCODE_APOSTROPHE, '*');
+        JIS_SHIFTED_MAP.put(KeyEvent.KEYCODE_BACKSLASH, '}');
+        JIS_SHIFTED_MAP.put(KeyEvent.KEYCODE_YEN, '|');
+        JIS_SHIFTED_MAP.put(KeyEvent.KEYCODE_RO, '_');
+    }
+
     // 設定項目
     /** URI 入力などの特定のフィールドで自動的に英字モードに切り替える設定。 */
     private boolean mAutoAsciiMode = false;
     /** SandS (Space and Shift) 機能を有効にする設定。 */
     private boolean mSandS = false;
+    /** 物理キーボードに日本語配列（JIS）を使用する設定。 */
+    private boolean mUseJisPhysicalKeyboard = false;
+    private boolean mUseZenkakuKey = true;
+    private boolean mUseEisuKey = true;
+    private boolean mUseKanaKey = true;
     /** モード切替時にカーソル付近にツールチップを表示する時間（ミリ秒）。0 の場合は非表示。 */
     private int mTooltipDuration = 1000;
     /** ツールチップ表示位置（"top" または "bottom"）。 */
     private String mTooltipPosition = "top";
+    /** 起動時の入力モード（"japanese" または "english"）。 */
+    private String mStartupMode = "japanese";
 
     /** 現在のエディタが TYPE_NULL（入力を受け付けない）かどうか。 */
     private boolean mIsInputTypeNull = false;
@@ -90,17 +136,17 @@ public class InputService extends InputMethodService implements SharedPreference
     private float mCursorTop = 0;
     /** スクリーン座標系でのキャレットの下端 Y 座標。 */
     private float mCursorBottom = 0;
-    /** 未確定文字列の開始 X 座標（存在しない場合は -1）。 */
-    private float mComposingHorizontal = -1;
     /** UI（ツールチップ）の更新リクエストがあるかどうか。 */
     private boolean mNeedsTooltipUpdate = false;
+    /** 単語登録セッション中かどうか。 */
+    private boolean mIsRegistering = false;
     /** ツールチップ表示用のポップアップ。 */
     private PopupWindow mTooltipPopup;
     /** ストローク入力ヘルプ表示用のポップアップ。 */
     private PopupWindow mHelpPopup;
     /** ツールチップを閉じる実行タスク。 */
     private final Runnable mHideRunnable = () -> {
-        if (mTooltipPopup != null) {
+        if (!mIsRegistering && mTooltipPopup != null) {
             mTooltipPopup.dismiss();
         }
     };
@@ -115,6 +161,24 @@ public class InputService extends InputMethodService implements SharedPreference
     private void logI(String msg) {
         if (BuildConfig.DEBUG) {
             Log.i("InputService", msg);
+        }
+    }
+
+    /**
+     * システムの設定（画面の向きやダークモード状態等）が変更されたときに呼び出されます。
+     */
+    @Override
+    public void onConfigurationChanged(Configuration newConfig) {
+        super.onConfigurationChanged(newConfig);
+        if (mEngine != null) {
+            mEngine.updateColors();
+            requestUIUpdate();
+        }
+        mInputView = null;
+        setInputView(onCreateInputView());
+        if (mTooltipPopup != null && mTooltipPopup.isShowing()) {
+            mTooltipPopup.dismiss();
+            mTooltipPopup = null;
         }
     }
 
@@ -144,14 +208,14 @@ public class InputService extends InputMethodService implements SharedPreference
      * 初回起動時や設定未初期化時に、デフォルト値を一括適用します。
      * 物理キーボードの有無による動的な判定を XML のデフォルト値より優先させます。
      */
-    public static void setupDefaultPreferences(android.content.Context context) {
+    public static void setupDefaultPreferences(Context context) {
         SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(context);
 
         // 1. 動的なデフォルト判定（XMLの static な値より先に処理して優先させる）
         if (!prefs.contains("keyboard_type")) {
-            android.content.res.Configuration config = context.getResources().getConfiguration();
-            boolean hasHardwareKeyboard = (config.keyboard != android.content.res.Configuration.KEYBOARD_NOKEYS &&
-                    config.keyboard != android.content.res.Configuration.KEYBOARD_UNDEFINED);
+            Configuration config = context.getResources().getConfiguration();
+            boolean hasHardwareKeyboard = (config.keyboard != Configuration.KEYBOARD_NOKEYS &&
+                    config.keyboard != Configuration.KEYBOARD_UNDEFINED);
             String defaultType = hasHardwareKeyboard ? "symbols" : "qwerty";
 
             // commit() を使用して、直後の setDefaultValues がこの値を認識できるようにする
@@ -181,7 +245,7 @@ public class InputService extends InputMethodService implements SharedPreference
     public View onCreateInputView() {
         logI("onCreateInputView()");
         if (mInputView == null) {
-            mInputView = new InputView(this);
+            mInputView = new InputView(this, getThemedContext(this));
         } else {
             // クラッシュ防止: 既に親がいる場合は古い親から切り離す
             ViewGroup parent = (ViewGroup) mInputView.getParent();
@@ -223,43 +287,61 @@ public class InputService extends InputMethodService implements SharedPreference
             mSpacePressed = false;
             mSandSUsed = false;
         }
-        mHasComposingText = false;
 
-        mIsInputTypeNull = false;
-        mEngine.resetOnStartInput();
+        mIsInputTypeNull = (attribute.inputType & InputType.TYPE_MASK_CLASS) == InputType.TYPE_NULL;
 
-        // 入力タイプに応じた初期モード判定
-        switch (attribute.inputType & InputType.TYPE_MASK_CLASS) {
-            case InputType.TYPE_CLASS_NUMBER:
-            case InputType.TYPE_CLASS_DATETIME:
-            case InputType.TYPE_CLASS_PHONE:
-                mEngine.toASCIIMode();
-                break;
-            case InputType.TYPE_CLASS_TEXT:
-                int variation = attribute.inputType & InputType.TYPE_MASK_VARIATION;
-                switch (variation) {
-                    case InputType.TYPE_TEXT_VARIATION_PASSWORD:
-                    case InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD:
-                    case InputType.TYPE_TEXT_VARIATION_WEB_PASSWORD:
-                    case InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS:
-                    case InputType.TYPE_TEXT_VARIATION_WEB_EMAIL_ADDRESS:
-                    case InputType.TYPE_TEXT_VARIATION_FILTER:
-                        mEngine.toASCIIMode();
-                        break;
-                    case InputType.TYPE_TEXT_VARIATION_URI:
-                        if (mAutoAsciiMode) {
+        if (!restarting) {
+            mHasComposingText = false;
+            mEngine.resetOnStartInput();
+
+            // 入力タイプに応じた初期モード判定
+            switch (attribute.inputType & InputType.TYPE_MASK_CLASS) {
+                case InputType.TYPE_CLASS_NUMBER:
+                case InputType.TYPE_CLASS_DATETIME:
+                case InputType.TYPE_CLASS_PHONE:
+                    mEngine.toASCIIMode();
+                    break;
+                case InputType.TYPE_CLASS_TEXT:
+                    int variation = attribute.inputType & InputType.TYPE_MASK_VARIATION;
+                    switch (variation) {
+                        case InputType.TYPE_TEXT_VARIATION_PASSWORD:
+                        case InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD:
+                        case InputType.TYPE_TEXT_VARIATION_WEB_PASSWORD:
+                        case InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS:
+                        case InputType.TYPE_TEXT_VARIATION_WEB_EMAIL_ADDRESS:
+                        case InputType.TYPE_TEXT_VARIATION_FILTER:
                             mEngine.toASCIIMode();
-                        }
-                        break;
-                    default:
-                        break;
-                }
-                break;
-            case InputType.TYPE_NULL:
-                mIsInputTypeNull = true;
-                break;
-            default:
-                break;
+                            break;
+                        case InputType.TYPE_TEXT_VARIATION_URI:
+                            if (mAutoAsciiMode) {
+                                mEngine.toASCIIMode();
+                            } else if ("english".equals(mStartupMode)) {
+                                mEngine.toASCIIMode();
+                            } else {
+                                mEngine.changeMode(SKKModeFullHiragana.INSTANCE, false);
+                            }
+                            break;
+                        default:
+                            if ("english".equals(mStartupMode)) {
+                                mEngine.toASCIIMode();
+                            } else {
+                                mEngine.changeMode(SKKModeFullHiragana.INSTANCE, false);
+                            }
+                            break;
+                    }
+                    break;
+                case InputType.TYPE_NULL:
+                    break;
+                default:
+                    if ("english".equals(mStartupMode)) {
+                        mEngine.toASCIIMode();
+                    } else {
+                        mEngine.changeMode(SKKModeFullHiragana.INSTANCE, false);
+                    }
+                    break;
+            }
+        } else {
+            logI("onStartInput: restarting session, preserving state.");
         }
 
         // 開始時に強制的に状態をチェックしてUIを更新（カーソル不可視ならアイコンを隠す）
@@ -290,6 +372,9 @@ public class InputService extends InputMethodService implements SharedPreference
             // 表示される前に最新の設定（ファイルからのレイアウト等）を確実に読み込む
             mInputView.readPrefs();
             mInputView.doStartInputView(editorInfo, restarting);
+            if (restarting) {
+                requestUIUpdate();
+            }
         }
     }
 
@@ -315,6 +400,7 @@ public class InputService extends InputMethodService implements SharedPreference
     public void onFinishInput() {
         logI("onFinishInput()");
         super.onFinishInput();
+        dismissStatusUI();
         hideCandidatesView();
         // セッション終了時はキーボードを隠す
         requestHideSelf(0);
@@ -361,13 +447,12 @@ public class InputService extends InputMethodService implements SharedPreference
         if (mPrefs != null) {
             mPrefs.unregisterOnSharedPreferenceChangeListener(this);
         }
-        mDictionary.commitChanges();
+        if (mDictionary != null) {
+            mDictionary.close();
+        }
         super.onDestroy();
     }
 
-    /**
-     * エディタ内での選択範囲やカーソル位置が更新された際に呼び出されます。
-     */
     /**
      * カーソル位置やテキストの選択状態が変更された際に呼び出されます。
      * <p>
@@ -416,19 +501,6 @@ public class InputService extends InputMethodService implements SharedPreference
             mCursorTop = points[1];
             mCursorBottom = points[3];
 
-            int composingStart = cursorAnchorInfo.getComposingTextStart();
-            if (composingStart >= 0) {
-                RectF firstCharRect = cursorAnchorInfo.getCharacterBounds(composingStart);
-                if (firstCharRect != null) {
-                    float[] compPoints = new float[]{firstCharRect.left, firstCharRect.top};
-                    matrix.mapPoints(compPoints);
-                    mComposingHorizontal = compPoints[0];
-                } else {
-                    mComposingHorizontal = -1;
-                }
-            } else {
-                mComposingHorizontal = -1;
-            }
         }
 
         // 視認性が変わった場合はアイコンを更新
@@ -436,8 +508,11 @@ public class InputService extends InputMethodService implements SharedPreference
             updateStatusIcon();
         }
 
-        // すでに表示中のツールチップがあれば位置を合わせる
+        // すでに表示中のツールチップ・候補ポップアップがあれば位置を合わせる
         updateTooltipPosition();
+        if (mInputView != null) {
+            mInputView.updateCandidatePopupPosition();
+        }
 
         // 座標が更新されたので、保留中のツールチップ表示リクエストがあれば実行する
         performTooltipUpdate();
@@ -451,7 +526,6 @@ public class InputService extends InputMethodService implements SharedPreference
         mCursorHorizontal = 0;
         mCursorTop = 0;
         mCursorBottom = 0;
-        mComposingHorizontal = -1;
         mIsCursorInvisible = true;
     }
 
@@ -478,45 +552,112 @@ public class InputService extends InputMethodService implements SharedPreference
     }
 
     /**
+     * ポップアップコンテンツビュー内の TextView に対してテキストを設定します。
+     */
+    private void setTooltipViewText(View popupContentView, String text) {
+        if (popupContentView == null) return;
+        TextView tv = popupContentView.findViewById(R.id.tooltip_text);
+        if (tv != null) {
+            tv.setText(text);
+        } else if (popupContentView instanceof TextView) {
+            ((TextView) popupContentView).setText(text);
+        }
+    }
+
+    @SuppressLint("DiscouragedApi")
+    private int getStatusBarHeight() {
+        if (mInputView != null) {
+            WindowInsetsCompat insets = ViewCompat.getRootWindowInsets(mInputView);
+            if (insets != null) {
+                androidx.core.graphics.Insets systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars());
+                if (systemBars.top > 0) {
+                    return systemBars.top;
+                }
+            }
+        }
+        int resourceId = getResources().getIdentifier("status_bar_height", "dimen", "android");
+        if (resourceId > 0) {
+            return getResources().getDimensionPixelSize(resourceId);
+        }
+        return 0;
+    }
+
+    /**
      * ツールチップの表示位置（スクリーン絶対座標）を計算します。
-     * <p>
-     * 以下のロジックで Gboard 風の配置を実現します：
-     * 1. キャレット（入力カーソル）の下端のスクリーン座標を特定します。
-     * 2. キャレット位置を中心に水平方向を合わせ、下端から 2dp の余白を持たせたスクリーン座標を算出します。
-     * </p>
+     * 上下に十分なスペースがない場合は自動的に位置を反転（Flip）し、画面内に収まるよう調整します。
      *
      * @param contentView ツールチップのコンテンツビュー
      * @return {x, y} スクリーン絶対座標の配列
      */
     private int[] calculateTooltipScreenCoordinates(View contentView) {
+        int screenWidth = getResources().getDisplayMetrics().widthPixels;
+        int screenHeight = getResources().getDisplayMetrics().heightPixels;
         contentView.measure(View.MeasureSpec.UNSPECIFIED, View.MeasureSpec.UNSPECIFIED);
         float density = getResources().getDisplayMetrics().density;
         int popupWidth = contentView.getMeasuredWidth();
         int popupHeight = contentView.getMeasuredHeight();
+        int margin = (int) (2 * density);
 
-        // 目標とするスクリーン絶対座標
+        int keyboardTop = screenHeight;
+        if (mInputView != null && mInputView.isShown()) {
+            int[] loc = new int[2];
+            mInputView.getLocationOnScreen(loc);
+            if (loc[1] > 0) {
+                keyboardTop = loc[1];
+            }
+        }
+
         int targetX = (int) mCursorHorizontal - (popupWidth / 2);
+        // 左右が画面からはみ出さないようクランプ
+        targetX = Math.max(0, Math.min(targetX, screenWidth - popupWidth));
+
+        float caretTop = Math.min(mCursorTop, mCursorBottom);
+        float caretBottom = Math.max(mCursorTop, mCursorBottom);
+
+        int topY = (int) caretTop - popupHeight - margin;
+        int bottomY = (int) caretBottom + margin;
         int targetY;
 
         if ("top".equals(mTooltipPosition)) {
-            // 1. キャレットのスクリーン座標（上端）を取得
-            float caretTop = Math.min(mCursorTop, mCursorBottom);
-            // 2. 目標とするスクリーン絶対座標 (キャレットの 2dp 上)
-            targetY = (int) caretTop - popupHeight - (int) (2 * density);
+            if (topY < 0 && (bottomY + popupHeight) <= keyboardTop) {
+                targetY = bottomY;
+            } else {
+                targetY = topY;
+            }
         } else {
-            // 1. キャレットのスクリーン座標（下端）を取得
-            float caretBottom = Math.max(mCursorTop, mCursorBottom);
-            // 2. 目標とするスクリーン絶対座標 (キャレットの 2dp 下)
-            targetY = (int) caretBottom + (int) (2 * density);
+            if ((bottomY + popupHeight) > keyboardTop && topY >= 0) {
+                targetY = topY;
+            } else {
+                targetY = bottomY;
+            }
         }
 
+        int statusBarHeight = getStatusBarHeight();
+        int maxAllowedY = Math.max(statusBarHeight, keyboardTop - popupHeight);
+        targetY = Math.max(statusBarHeight, Math.min(targetY, maxAllowedY));
+
         return new int[]{targetX, targetY};
+    }
+
+    private View getAnchorView() {
+        if (mInputView != null && mInputView.getWindowToken() != null) {
+            return mInputView.getRootView();
+        }
+        try {
+            Dialog dialog = getWindow();
+            if (dialog != null && dialog.getWindow() != null) {
+                return dialog.getWindow().getDecorView();
+            }
+        } catch (Exception e) {
+            // ignore
+        }
+        return null;
     }
 
     /**
      * PopupWindow を指定されたスクリーン絶対座標に表示、または更新します。
      * <p>
-     * IME ウィンドウ（InputView）の左上角からの相対座標に内部で変換することで、
+     * IME ウィンドウの左上角からの相対座標に内部で変換することで、
      * {@link PopupWindow#setClippingEnabled(boolean)} が false の場合にウィンドウ外への描画を可能にします。
      * </p>
      *
@@ -525,8 +666,8 @@ public class InputService extends InputMethodService implements SharedPreference
      * @param screenY 表示したい場所のスクリーン Y 座標
      */
     private void showPopupAtScreenLocation(PopupWindow popup, int screenX, int screenY) {
-        if (mInputView == null) return;
-        View anchor = mInputView.getRootView();
+        View anchor = getAnchorView();
+        if (anchor == null) return;
 
         int[] loc = new int[2];
         anchor.getLocationOnScreen(loc);
@@ -557,8 +698,40 @@ public class InputService extends InputMethodService implements SharedPreference
     @Override
     public void onSharedPreferenceChanged(SharedPreferences sharedPreferences, String key) {
         logI("onSharedPreferenceChanged: key=" + key);
+        if ("keyboard_theme".equals(key)) {
+            mInputView = null;
+            setInputView(onCreateInputView());
+        }
+        if ("keyboard_type".equals(key)) {
+            updateInputViewShown();
+        }
         readPrefs();
     }
+
+    /**
+     * キーボードのテーマ設定（システム設定に従う/ダーク/ライト）に基づいて、
+     * 適切な UIMode（Night Mode）を適用したコンテキストを生成して返します。
+     *
+     * @param context 元のコンテキスト
+     * @return テーマが適用されたコンテキスト
+     */
+    public static Context getThemedContext(Context context) {
+        SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(context);
+        String themeMode = prefs.getString("keyboard_theme", "auto");
+
+        if ("auto".equals(themeMode)) {
+            return context;
+        }
+
+        Configuration config = new Configuration(context.getResources().getConfiguration());
+        if ("dark".equals(themeMode)) {
+            config.uiMode = (config.uiMode & ~Configuration.UI_MODE_NIGHT_MASK) | Configuration.UI_MODE_NIGHT_YES;
+        } else if ("light".equals(themeMode)) {
+            config.uiMode = (config.uiMode & ~Configuration.UI_MODE_NIGHT_MASK) | Configuration.UI_MODE_NIGHT_NO;
+        }
+        return context.createConfigurationContext(config);
+    }
+
 
     /**
      * 現在の入力状態（エディタの属性やカーソルの可視性）から、
@@ -577,10 +750,21 @@ public class InputService extends InputMethodService implements SharedPreference
     private void readPrefs() {
         SharedPreferences prefs = (mPrefs != null) ? mPrefs : PreferenceManager.getDefaultSharedPreferences(this);
         mSandS = prefs.getBoolean("s_and_s", false);
+        mUseJisPhysicalKeyboard = prefs.getBoolean("use_jis_physical_keyboard", false);
+        mUseZenkakuKey = prefs.getBoolean("use_zenkaku_key", true);
+        mUseEisuKey = prefs.getBoolean("use_eisu_key", true);
+        mUseKanaKey = prefs.getBoolean("use_kana_key", true);
         // 設定画面（秒）の値を内部用のミリ秒に変換
         mTooltipDuration = prefs.getInt("tooltip_duration_sec", 1) * 1000;
         mTooltipPosition = prefs.getString("tooltip_position", "top");
         mAutoAsciiMode = prefs.getBoolean("auto_ascii_mode", false);
+        mStartupMode = prefs.getString("startup_mode", "japanese");
+
+        // 辞書データベースの再読み込み（設定画面や辞書ツールでの変更を反映）
+        if (mDictionary != null) {
+            mDictionary.reloadUserDictionary();
+            mDictionary.reloadImportedDictionary();
+        }
 
         // エンジン側の設定を更新
         if (mEngine != null) {
@@ -655,6 +839,16 @@ public class InputService extends InputMethodService implements SharedPreference
             default:
                 break;
         }
+
+        if (event.isCtrlPressed() && mForwardedCtrlKeys.contains(keyCode)) {
+            mForwardedCtrlKeys.remove(keyCode);
+            InputConnection ic = getCurrentInputConnection();
+            if (ic != null) {
+                ic.sendKeyEvent(event);
+                return true;
+            }
+        }
+
         return super.onKeyUp(keyCode, event);
     }
 
@@ -672,9 +866,25 @@ public class InputService extends InputMethodService implements SharedPreference
             // カーソル不可視等の場合は、物理キー操作をそのままシステムに渡す
             return super.onKeyDown(keyCode, event);
         }
+        logI("onKeyDown keyCode=" + keyCode);
 
         if (event.isCtrlPressed()) {
             if (mEngine.processCtrlKey(keyCode)) {
+                if (mSandS && keyCode == KeyEvent.KEYCODE_SPACE) {
+                    mSandSUsed = true;
+                }
+                return true;
+            }
+            if (keyCode == KeyEvent.KEYCODE_DEL) {
+                if (!mEngine.handleBackspace()) {
+                    sendDownUpKeyEvents(KeyEvent.KEYCODE_DEL);
+                }
+                return true;
+            }
+            InputConnection ic = getCurrentInputConnection();
+            if (ic != null) {
+                mForwardedCtrlKeys.add(keyCode);
+                ic.sendKeyEvent(event);
                 return true;
             }
         }
@@ -701,6 +911,35 @@ public class InputService extends InputMethodService implements SharedPreference
         }
 
         switch (keyCode) {
+            case KeyEvent.KEYCODE_ZENKAKU_HANKAKU:
+                if (mUseZenkakuKey && mEngine != null) {
+                    mEngine.toggleEnglishJapanese();
+                    return true;
+                }
+                break;
+            case KeyEvent.KEYCODE_GRAVE:
+                if (mUseJisPhysicalKeyboard && mUseZenkakuKey && mEngine != null) {
+                    mEngine.toggleEnglishJapanese();
+                    return true;
+                }
+                break;
+            case KeyEvent.KEYCODE_EISU:
+                if (mUseEisuKey && mEngine != null) {
+                    mEngine.toASCIIMode();
+                    return true;
+                }
+                break;
+            case KeyEvent.KEYCODE_KANA:
+                if (mUseKanaKey && mEngine != null) {
+                    mEngine.handleKanaKey();
+                    return true;
+                }
+                break;
+            case KeyEvent.KEYCODE_ESCAPE:
+                if (mEngine.handleCancel()) {
+                    return true;
+                }
+                break;
             case KeyEvent.KEYCODE_BACK:
                 if (mEngine.handleBackKey()) {
                     return true;
@@ -732,6 +971,9 @@ public class InputService extends InputMethodService implements SharedPreference
                     return true;
                 }
                 break;
+            case KeyEvent.KEYCODE_SYM:
+                toggleEmojiPicker();
+                return true;
             default:
                 if (translateKeyDown(event)) {
                     return true;
@@ -750,16 +992,43 @@ public class InputService extends InputMethodService implements SharedPreference
      */
     private boolean translateKeyDown(KeyEvent event) {
         int c;
+        boolean isShifted = false;
         if (mSandS && mSpacePressed) {
-            c = event.getUnicodeChar(KeyEvent.META_SHIFT_ON);
+            isShifted = true;
             mSandSUsed = true;
+        } else if ((event.getMetaState() & KeyEvent.META_SHIFT_ON) != 0) {
+            isShifted = true;
+        }
+
+        if (mUseJisPhysicalKeyboard) {
+            int keyCode = event.getKeyCode();
+            Map<Integer, Character> map = isShifted ? JIS_SHIFTED_MAP : JIS_NORMAL_MAP;
+            Character mapped = map.get(keyCode);
+            if (mapped != null) {
+                c = mapped;
+            } else {
+                c = event.getUnicodeChar(isShifted ? KeyEvent.META_SHIFT_ON : 0);
+            }
         } else {
-            c = event.getUnicodeChar();
+            if (mSandS && mSpacePressed) {
+                c = event.getUnicodeChar(KeyEvent.META_SHIFT_ON);
+                mSandSUsed = true;
+            } else {
+                c = event.getUnicodeChar();
+            }
         }
 
         InputConnection ic = getCurrentInputConnection();
         if (c == 0 || ic == null) {
             return false;
+        }
+
+        if (!Character.isLetter(c) && !Character.isDigit(c) && c != '.' && c != ',' && c != '/' && c != '>' && c != '<' && c != '?' && c != '-' && c != '~' && c != '[' && c != ']') {
+            if (mEngine != null && mEngine.hasComposing()) {
+                mEngine.getConverter().flush();
+            }
+            commitText(String.valueOf((char) c), 1);
+            return true;
         }
 
         processKey(c);
@@ -854,13 +1123,53 @@ public class InputService extends InputMethodService implements SharedPreference
     }
 
     /**
+     * 物理キーボードが接続されているかどうかを判定します。
+     *
+     * @return 物理キーボードが接続されている場合は true
+     */
+    public boolean hasHardwareKeyboardConnected() {
+        Configuration config = getResources().getConfiguration();
+        return (config.keyboard != Configuration.KEYBOARD_NOKEYS &&
+                config.keyboard != Configuration.KEYBOARD_UNDEFINED &&
+                config.hardKeyboardHidden != Configuration.HARDKEYBOARDHIDDEN_YES);
+    }
+
+    /**
+     * 現在のキーボードタイプに応じたフローティング候補表示の設定状態を返します。
+     * 物理キーボードが接続されている場合は常に true を返します。
+     *
+     * @return フローティング表示を使用する場合は true
+     */
+    public boolean isFloatingCandidateEnabled() {
+        if (hasHardwareKeyboardConnected()) {
+            return true;
+        }
+        SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(this);
+        String type = prefs.getString("keyboard_type", "qwerty");
+        switch (type) {
+            case "stroke":
+                return prefs.getBoolean("floating_candidate_stroke", true);
+            case "symbols":
+                return prefs.getBoolean("floating_candidate_symbols", true);
+            case "tablet":
+                return prefs.getBoolean("floating_candidate_tablet", false);
+            case "qwerty":
+                return prefs.getBoolean("floating_candidate_qwerty", false);
+            case "none":
+                return prefs.getBoolean("floating_candidate_none", true);
+            default:
+                return false;
+        }
+    }
+
+    /**
      * 候補リストを UI に設定し、候補表示エリアを可視化します。
      *
      * @param list 表示する候補文字列のリスト
      */
     public void setCandidates(List<String> list) {
         if (mInputView != null) {
-            if (list != null) {
+            if (list != null && !isFloatingCandidateEnabled()) {
                 mInputView.setCandidates(list);
                 mInputView.showCandidatesView();
             } else {
@@ -870,13 +1179,35 @@ public class InputService extends InputMethodService implements SharedPreference
     }
 
     /**
-     * 詳細な候補情報（ユーザー辞書フラグ等を含む）を UI に設定します。
+     * 絵文字ピッカーを開きます。
+     */
+    public void openEmojiPicker() {
+        if (mInputView != null) {
+            mInputView.showEmojiPicker();
+        }
+    }
+
+    /**
+     * 絵文字ピッカーの表示・非表示を切り替えます。
+     */
+    public void toggleEmojiPicker() {
+        if (mInputView != null) {
+            if (mInputView.isEmojiPickerShowing()) {
+                mInputView.hideEmojiPicker();
+            } else {
+                mInputView.showEmojiPicker();
+            }
+        }
+    }
+
+    /**
+     * 詳細な候補情報（ユーザー辞書フラグ等を含む）を元に UI に設定します。
      *
      * @param candidates 表示する候補オブジェクトのリスト
      */
     public void setCandidateObjects(List<Candidate> candidates) {
         if (mInputView != null) {
-            if (candidates != null) {
+            if (candidates != null && !isFloatingCandidateEnabled()) {
                 mInputView.setCandidateObjects(candidates);
                 mInputView.showCandidatesView();
             } else {
@@ -934,6 +1265,20 @@ public class InputService extends InputMethodService implements SharedPreference
     }
 
     /**
+     * エディタに対してテキストをコミット（確定入力）します。
+     *
+     * @param text              コミットするテキスト
+     * @param newCursorPosition 文字列内での新しいカーソル相対位置
+     */
+    public void commitText(CharSequence text, int newCursorPosition) {
+        InputConnection ic = getCurrentInputConnection();
+        if (ic != null) {
+            ic.commitText(text, newCursorPosition);
+            mHasComposingText = false;
+        }
+    }
+
+    /**
      * エディタに対して未確定文字列（Composing Text）を設定します。
      *
      * @param text              設定する未確定文字列
@@ -948,7 +1293,13 @@ public class InputService extends InputMethodService implements SharedPreference
         if (!mHasComposingText && text.length() == 0) {
             return;
         }
-        mHasComposingText = text.length() != 0;
+        if (text.length() == 0) {
+            mHasComposingText = false;
+            ic.setComposingText("", newCursorPosition);
+            ic.finishComposingText();
+            return;
+        }
+        mHasComposingText = true;
         ic.setComposingText(text, newCursorPosition);
     }
 
@@ -1020,11 +1371,15 @@ public class InputService extends InputMethodService implements SharedPreference
      */
     public void dismissStatusUI() {
         mNeedsTooltipUpdate = false;
+        mIsRegistering = false;
         hideStatusIcon();
         mHideHandler.removeCallbacks(mHideRunnable);
         mHideHandler.removeCallbacks(mShowTooltipRunnable);
         if (mTooltipPopup != null) {
             mTooltipPopup.dismiss();
+        }
+        if (mInputView != null) {
+            mInputView.hideFloatingCandidates();
         }
         if (mHelpPopup != null) {
             mHelpPopup.dismiss();
@@ -1057,6 +1412,67 @@ public class InputService extends InputMethodService implements SharedPreference
     }
 
     /**
+     * 単語登録用ポップアップを非表示にします。
+     */
+    public void hideRegistrationPopup() {
+        mIsRegistering = false;
+        hideFullWidthCandidatePopup();
+    }
+
+    /**
+     * 変換候補用ポップアップを非表示にします。
+     */
+    public void hideFloatingCandidates() {
+        if (!mIsRegistering && mInputView != null) {
+            mInputView.hideFloatingCandidates();
+        }
+    }
+
+    public void navigateCandidateFlexbox2D(int dRow, int dCol) {
+        if (mInputView != null) {
+            mInputView.navigateCandidateFlexbox2D(dRow, dCol);
+        }
+    }
+
+    public void showCandidateFlexboxPopup(String header, List<String> items, int selectedIdx) {
+        if (mInputView != null) {
+            mInputView.showCandidateFlexboxPopup(header, items, selectedIdx);
+        }
+    }
+
+    public void hideFullWidthCandidatePopup() {
+        if (mInputView != null) {
+            mInputView.hideFullWidthCandidatePopup();
+        }
+    }
+
+    public float getCursorTop() {
+        return mCursorTop;
+    }
+
+    public float getCursorBottom() {
+        return mCursorBottom;
+    }
+
+    public float getCursorHorizontal() {
+        return mCursorHorizontal;
+    }
+
+    public boolean isCursorInvisible() {
+        return mIsCursorInvisible;
+    }
+
+    public int getCurrentCandidateIndex() {
+        return mEngine != null ? mEngine.getCurrentCandidateIndex() : 0;
+    }
+
+    public void setCandidateIndex(int index) {
+        if (mEngine != null) {
+            mEngine.setCandidateIndex(index);
+        }
+    }
+
+    /**
      * 指定されたテキストでツールチップを即座に表示、または更新します。
      * <p>
      * Gboard 等の標準的な IME の挙動に合わせ、キャレットの直下付近に表示されるよう制御します。
@@ -1070,33 +1486,32 @@ public class InputService extends InputMethodService implements SharedPreference
         mHideHandler.removeCallbacks(mHideRunnable);
 
         if (mTooltipPopup != null && mTooltipPopup.isShowing()) {
-            // 既存のポップアップがあれば内容と位置だけ更新（ちらつき防止）
-            TextView tv = (TextView) mTooltipPopup.getContentView();
-            tv.setText(text);
+            setTooltipViewText(mTooltipPopup.getContentView(), text);
             updateTooltipPosition();
         } else {
-            // 新規作成
             LayoutInflater inflater = LayoutInflater.from(this);
-            TextView tv = (TextView) inflater.inflate(R.layout.tooltip_view, null);
-            tv.setText(text);
+            View view = inflater.inflate(R.layout.tooltip_view, null);
+            setTooltipViewText(view, text);
 
-            mTooltipPopup = new PopupWindow(tv, ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+            mTooltipPopup = new PopupWindow(view, ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
             mTooltipPopup.setFocusable(false);
             mTooltipPopup.setAnimationStyle(0); // アニメーションを無効化
 
-            int[] coords = calculateTooltipScreenCoordinates(tv);
+            int[] coords = calculateTooltipScreenCoordinates(view);
             showPopupAtScreenLocation(mTooltipPopup, coords[0], coords[1]);
 
             logI(String.format("showTooltip: SCR(%.1f, %.1f), TARGET(%d, %d)",
                     mCursorHorizontal, mCursorTop, coords[0], coords[1]));
         }
-        mHideHandler.postDelayed(mHideRunnable, mTooltipDuration);
+        if (!mIsRegistering) {
+            mHideHandler.postDelayed(mHideRunnable, mTooltipDuration);
+        }
     }
 
     /**
      * ストローク入力のヘルプをポップアップで表示します。
      * <p>
-     * 内部で {@link android.widget.ViewFlipper} を使用しており、「前へ」「次へ」ボタンで
+     * 内部で {@link ViewFlipper} を使用しており、「前へ」「次へ」ボタンで
      * 複数のヘルプページをループ表示します。
      * </p>
      * <p>
@@ -1121,8 +1536,8 @@ public class InputService extends InputMethodService implements SharedPreference
                 View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
         int helpHeight = helpView.getMeasuredHeight();
 
-        if (mInputView != null) {
-            View anchor = mInputView.getRootView();
+        View anchor = getAnchorView();
+        if (anchor != null) {
             int[] loc = new int[2];
             anchor.getLocationOnScreen(loc);
 
@@ -1141,9 +1556,10 @@ public class InputService extends InputMethodService implements SharedPreference
             int targetX = loc[0];
             int targetY = loc[1] - helpHeight;
 
-            // 画面上端を超える場合は 0 に固定
-            if (targetY < 0) {
-                targetY = 0;
+            int statusBarHeight = getStatusBarHeight();
+            // 画面上端（ステータスバー領域）を超える場合はステータスバーの下に固定
+            if (targetY < statusBarHeight) {
+                targetY = statusBarHeight;
             }
 
             logI(String.format("showStrokeHelp: SCR_Y=%d, H=%d", targetY, helpHeight));

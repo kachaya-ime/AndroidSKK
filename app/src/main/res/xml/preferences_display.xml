@@ -1,0 +1,30 @@
+<PreferenceScreen
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    >
+    <SwitchPreference
+        android:defaultValue="true"
+        android:key="display_state"
+        android:summary="入力中に▽や▼を表示します"
+        android:title="▽▼モード表示"
+        />
+    <SeekBarPreference
+        android:defaultValue="1"
+        android:key="tooltip_duration_sec"
+        android:max="5"
+        android:min="0"
+        android:summary="モード変更時のツールチップ表示時間を設定します（0で非表示）"
+        android:title="ツールチップ表示時間"
+        app:showSeekBarValue="true"
+        app:updatesContinuously="true"
+        />
+    <ListPreference
+        android:defaultValue="top"
+        android:entries="@array/tooltip_positions"
+        android:entryValues="@array/tooltip_position_values"
+        android:key="tooltip_position"
+        android:title="ツールチップ表示位置"
+        app:useSimpleSummaryProvider="true"
+        />
+
+</PreferenceScreen>

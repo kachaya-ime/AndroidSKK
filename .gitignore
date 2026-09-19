@@ -25,9 +25,11 @@ google-services.json
 # Build output
 /app/build/
 /app/release/
+/tool/build/
+/app/src/androidTest/
+/app/src/test/
 
 # Project exclude paths
-/tool/build/
 /work/
 /data/*
 !/data/prepare.bat

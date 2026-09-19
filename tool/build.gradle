@@ -37,3 +37,11 @@ tasks.register('runSudachiDictConverter', JavaExec) {
     mainClass = 'io.github.kachaya.skk.SudachiDictConverter'
     workingDir = rootProject.projectDir
 }
+
+tasks.register('runEmojiConverter', JavaExec) {
+    group = 'application'
+    description = 'Runs the EmojiConverter tool'
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'io.github.kachaya.skk.EmojiConverter'
+    workingDir = rootProject.projectDir
+}

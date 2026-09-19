@@ -5,12 +5,25 @@
         <item>QWERTY</item>
         <item>Tablet</item>
         <item>ストローク</item>
+        <item>なし</item>
     </string-array>
     <string-array name="keyboard_type_values">
         <item>symbols</item>
         <item>qwerty</item>
         <item>tablet</item>
         <item>stroke</item>
+        <item>none</item>
+    </string-array>
+
+    <string-array name="keyboard_themes">
+        <item>システム設定に従う</item>
+        <item>ダーク</item>
+        <item>ライト</item>
+    </string-array>
+    <string-array name="keyboard_theme_values">
+        <item>auto</item>
+        <item>dark</item>
+        <item>light</item>
     </string-array>
 
     <string-array name="keyboard_heights">
@@ -51,11 +64,24 @@
         <item>90%</item>
         <item>80%</item>
         <item>70%</item>
+        <item>60%</item>
+        <item>50%</item>
     </string-array>
     <string-array name="stroke_width_values">
         <item>1.0</item>
         <item>0.9</item>
         <item>0.8</item>
         <item>0.7</item>
+        <item>0.6</item>
+        <item>0.5</item>
+    </string-array>
+
+    <string-array name="startup_modes">
+        <item>日本語モード</item>
+        <item>英語モード</item>
+    </string-array>
+    <string-array name="startup_mode_values">
+        <item>japanese</item>
+        <item>english</item>
     </string-array>
 </resources>

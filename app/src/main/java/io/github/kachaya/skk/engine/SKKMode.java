@@ -20,10 +20,10 @@ public interface SKKMode {
      * Ctrl キーと同時押しのキー入力を、現在のモードに従って処理します。
      *
      * @param context SKK エンジンのコンテキスト
-     * @param keyCode KeyEvent で定義されているキーコード
+     * @param action  割り当てられている CtrlAction
      * @return イベントを消費した場合は true
      */
-    boolean processCtrlKey(SKKEngine context, int keyCode);
+    boolean processCtrlKey(SKKEngine context, CtrlAction action);
 
     /**
      * 与えられたテキストを、現在のモードの性質に合わせて最終変換（半角化、全角化等）します。

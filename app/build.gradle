@@ -10,8 +10,8 @@ android {
         applicationId "io.github.kachaya.skk"
         minSdk 28
         targetSdk 36
-        versionCode 20200
-        versionName "2.2.0"
+        versionCode 30000
+        versionName "3.0.0"
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -32,6 +32,10 @@ android {
                 output.outputFileName.set("${projectName}-${versionName}.apk")
             }
         })
+    }
+
+    testOptions {
+        unitTests.returnDefaultValues = true
     }
 
     compileOptions {
@@ -60,6 +64,7 @@ dependencies {
     implementation libs.activity
     implementation libs.constraintlayout
     implementation libs.flexbox
+    implementation libs.recyclerview
     testImplementation libs.junit
     androidTestImplementation libs.ext.junit
     androidTestImplementation libs.espresso.core

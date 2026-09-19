@@ -98,28 +98,51 @@ public enum SKKStateAbbrevConversion implements SKKState {
      * 候補の選択移動や、Ctrl-J による確定などを共通処理として提供します。
      *
      * @param context SKKエンジンのコンテキスト
-     * @param keyCode KeyEventで定義されているキーコード
+     * @param action  割り当てられている CtrlAction
      * @return イベントを消費した場合は true
      */
     @Override
-    public boolean processCtrlKey(SKKEngine context, int keyCode) {
-        switch (keyCode) {
-            case KeyEvent.KEYCODE_N:
-            case KeyEvent.KEYCODE_F:
-                context.chooseAdjacentCandidate(true);
+    public boolean processCtrlKey(SKKEngine context, CtrlAction action) {
+        switch (action) {
+            case CURSOR_DOWN:
+                context.chooseCandidate2D(1, 0);
                 return true;
-            case KeyEvent.KEYCODE_P:
-            case KeyEvent.KEYCODE_B:
-                context.chooseAdjacentCandidate(false);
+            case CURSOR_UP:
+                context.chooseCandidate2D(-1, 0);
                 return true;
-            case KeyEvent.KEYCODE_J:
+            case CURSOR_RIGHT:
+                context.chooseCandidate2D(0, 1);
+                return true;
+            case CURSOR_LEFT:
+                context.chooseCandidate2D(0, -1);
+                return true;
+            case KANA_KEY:
                 context.handleKanaKey();
                 return true;
-            case KeyEvent.KEYCODE_G:
+            case CANCEL:
                 return handleCancel(context);
-            case KeyEvent.KEYCODE_Q:
+            case TOGGLE_KANA:
                 context.toggleKana();
                 return true;
+            case TOGGLE_EN_JP:
+                context.toggleEnglishJapanese();
+                return true;
+            case LAUNCH_SETTINGS:
+                context.launchSettings();
+                return true;
+            case OPEN_EMOJI:
+                context.openEmojiPicker();
+                return true;
+            case DELETE_CHAR:
+                context.handleBackspace();
+                return true;
+            case FORWARD_DELETE:
+            case LINE_START:
+            case LINE_END:
+            case KILL_LINE:
+                return true;
+            default:
+                break;
         }
         return false;
     }
@@ -158,10 +181,14 @@ public enum SKKStateAbbrevConversion implements SKKState {
      */
     @Override
     public boolean processDpad(SKKEngine context, int keyCode) {
-        if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
-            context.chooseAdjacentCandidate(false);
+        if (keyCode == KeyEvent.KEYCODE_DPAD_UP) {
+            context.chooseCandidate2D(-1, 0);
+        } else if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
+            context.chooseCandidate2D(1, 0);
+        } else if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
+            context.chooseCandidate2D(0, -1);
         } else if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
-            context.chooseAdjacentCandidate(true);
+            context.chooseCandidate2D(0, 1);
         }
         return true;
     }

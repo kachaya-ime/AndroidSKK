@@ -9,14 +9,14 @@ import android.widget.Toast;
 
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
+import androidx.annotation.NonNull;
 import androidx.appcompat.app.ActionBar;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
-import androidx.preference.ListPreference;
+import androidx.fragment.app.Fragment;
 import androidx.preference.Preference;
 import androidx.preference.PreferenceFragmentCompat;
 import androidx.preference.PreferenceManager;
-import androidx.preference.SwitchPreference;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -27,6 +27,7 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.Iterator;
 import java.util.Map;
 import java.util.TreeMap;
 
@@ -37,10 +38,21 @@ import io.github.kachaya.skk.keyboard.LayoutManager;
  * SKK の動作設定やカスタマイズを行うための設定画面アクティビティです。
  * <p>
  * Android Jetpack の Preference ライブラリを使用しており、入力ルール、表示設定、記号ボタンの定義などの
- * ユーザー設定を管理します。内部の {@link SettingsFragment} が実際の UI 構築を担当します。
+ * ユーザー設定を管理します。内部の {@link SettingsFragment} および各サブフラグメントが実際の UI 構築を担当します。
  * </p>
  */
-public class SettingsActivity extends AppCompatActivity {
+public class SettingsActivity extends AppCompatActivity implements
+        PreferenceFragmentCompat.OnPreferenceStartFragmentCallback {
+
+    private final ActivityResultLauncher<String> mBackupLauncher = registerForActivityResult(
+            new ActivityResultContracts.CreateDocument("application/json"),
+            this::backupSettings
+    );
+
+    private final ActivityResultLauncher<String[]> mRestoreLauncher = registerForActivityResult(
+            new ActivityResultContracts.OpenDocument(),
+            this::restoreSettings
+    );
 
     /**
      * アクティビティ生成時の初期化を行います。
@@ -60,119 +72,68 @@ public class SettingsActivity extends AppCompatActivity {
         }
         ActionBar actionBar = getSupportActionBar();
         if (actionBar != null) {
-            actionBar.setDisplayHomeAsUpEnabled(false);
+            actionBar.setDisplayHomeAsUpEnabled(true);
         }
+
+        getSupportFragmentManager().addOnBackStackChangedListener(() -> {
+            ActionBar ab = getSupportActionBar();
+            if (ab != null) {
+                if (getSupportFragmentManager().getBackStackEntryCount() > 0) {
+                    ab.setDisplayHomeAsUpEnabled(true);
+                } else {
+                    ab.setDisplayHomeAsUpEnabled(true);
+                    ab.setTitle(R.string.title_activity_settings);
+                }
+            }
+        });
+    }
+
+    @Override
+    public boolean onSupportNavigateUp() {
+        if (getSupportFragmentManager().popBackStackImmediate()) {
+            return true;
+        }
+        finish();
+        return true;
+    }
+
+    @Override
+    public boolean onPreferenceStartFragment(@NonNull PreferenceFragmentCompat caller, @NonNull Preference pref) {
+        final Bundle args = pref.getExtras();
+        String fragmentName = pref.getFragment();
+        if (fragmentName == null) {
+            return false;
+        }
+        final Fragment fragment = getSupportFragmentManager().getFragmentFactory().instantiate(
+                getClassLoader(),
+                fragmentName);
+        fragment.setArguments(args);
+        getSupportFragmentManager().beginTransaction()
+                .replace(R.id.settings, fragment)
+                .addToBackStack(null)
+                .commit();
+        if (pref.getTitle() != null && getSupportActionBar() != null) {
+            getSupportActionBar().setTitle(pref.getTitle());
+            getSupportActionBar().setDisplayHomeAsUpEnabled(true);
+        }
+        return true;
     }
 
     /**
-     * 各設定項目の表示と、ユーザー操作に応じた動的な動作定義を行うフラグメントクラスです。
+     * ルート設定画面のフラグメントクラスです。
      */
     public static class SettingsFragment extends PreferenceFragmentCompat {
 
-        private final ActivityResultLauncher<String> mBackupLauncher = registerForActivityResult(
-                new ActivityResultContracts.CreateDocument("application/json"),
-                this::backupSettings
-        );
-
-        private final ActivityResultLauncher<String[]> mRestoreLauncher = registerForActivityResult(
-                new ActivityResultContracts.OpenDocument(),
-                this::restoreSettings
-        );
-
-        /**
-         * Preference リソースをロードし、各項目のリスナー設定や初期化を行います。
-         * 記号設定用の入力欄への等幅フォント適用や、リセットボタンの処理、アプリ情報の表示などを担当します。
-         *
-         * @param savedInstanceState 保存された状態
-         * @param rootKey            PreferenceScreen のルートキー
-         */
         @Override
         public void onCreatePreferences(Bundle savedInstanceState, String rootKey) {
-            // デフォルト値の一括適用（物理キーボード判定を含む）
             InputService.setupDefaultPreferences(getContext());
-
             setPreferencesFromResource(R.xml.root_preferences, rootKey);
 
             Preference legalInfoPref = findPreference("legal_info");
             if (legalInfoPref != null) {
                 legalInfoPref.setOnPreferenceClickListener(preference -> {
-                    // 親アクティビティのメソッドを直接呼び出す
                     if (getActivity() instanceof SettingsActivity) {
                         ((SettingsActivity) getActivity()).showLegalInfoDialog();
-                    }
-                    return true;
-                });
-            }
-
-            ListPreference keyboardTypePref = findPreference("keyboard_type");
-            SwitchPreference inputSingleLinePref = findPreference("input_single_line");
-            Preference symbolsCustomizerPref = findPreference("symbols_customizer");
-            Preference qwertyCustomizerPref = findPreference("keyboard_customizer_qwerty");
-            Preference tabletCustomizerPref = findPreference("keyboard_customizer_tablet");
-            Preference strokeAlignPref = findPreference("stroke_align");
-            Preference strokeWidthPref = findPreference("stroke_width_scale");
-            Preference keyboardHeightPref = findPreference("keyboard_height_scale");
-
-            if (keyboardTypePref != null) {
-                // 初期状態の反映
-                String currentType = keyboardTypePref.getValue();
-                boolean isSymbols = "symbols".equals(currentType);
-                boolean isQwerty = "qwerty".equals(currentType);
-                boolean isTablet = "tablet".equals(currentType);
-                boolean isStroke = "stroke".equals(currentType);
-
-                if (inputSingleLinePref != null) {
-                    inputSingleLinePref.setEnabled(isSymbols);
-                }
-                if (symbolsCustomizerPref != null) {
-                    symbolsCustomizerPref.setEnabled(isSymbols);
-                }
-                if (qwertyCustomizerPref != null) {
-                    qwertyCustomizerPref.setEnabled(isQwerty);
-                }
-                if (tabletCustomizerPref != null) {
-                    tabletCustomizerPref.setEnabled(isTablet);
-                }
-                if (strokeAlignPref != null) {
-                    strokeAlignPref.setEnabled(isStroke);
-                }
-                if (strokeWidthPref != null) {
-                    strokeWidthPref.setEnabled(isStroke);
-                }
-                if (keyboardHeightPref != null) {
-                    keyboardHeightPref.setEnabled(!isStroke);
-                }
-
-                keyboardTypePref.setOnPreferenceChangeListener((preference, newValue) -> {
-                    String newType = (String) newValue;
-                    boolean isSymbolsNew = "symbols".equals(newType);
-                    boolean isQwertyNew = "qwerty".equals(newType);
-                    boolean isTabletNew = "tablet".equals(newType);
-                    boolean isStrokeNew = "stroke".equals(newType);
-
-                    if (inputSingleLinePref != null) {
-                        inputSingleLinePref.setEnabled(isSymbolsNew);
-                        if (!isSymbolsNew) {
-                            inputSingleLinePref.setChecked(false);
-                        }
-                    }
-                    if (symbolsCustomizerPref != null) {
-                        symbolsCustomizerPref.setEnabled(isSymbolsNew);
-                    }
-                    if (qwertyCustomizerPref != null) {
-                        qwertyCustomizerPref.setEnabled(isQwertyNew);
-                    }
-                    if (tabletCustomizerPref != null) {
-                        tabletCustomizerPref.setEnabled(isTabletNew);
-                    }
-                    if (strokeAlignPref != null) {
-                        strokeAlignPref.setEnabled(isStrokeNew);
-                    }
-                    if (strokeWidthPref != null) {
-                        strokeWidthPref.setEnabled(isStrokeNew);
-                    }
-                    if (keyboardHeightPref != null) {
-                        keyboardHeightPref.setEnabled(!isStrokeNew);
                     }
                     return true;
                 });
@@ -187,7 +148,9 @@ public class SettingsActivity extends AppCompatActivity {
             Preference backupPref = findPreference("backup_settings");
             if (backupPref != null) {
                 backupPref.setOnPreferenceClickListener(preference -> {
-                    mBackupLauncher.launch("skk_backup.json");
+                    if (getActivity() instanceof SettingsActivity) {
+                        ((SettingsActivity) getActivity()).mBackupLauncher.launch("skk_backup.json");
+                    }
                     return true;
                 });
             }
@@ -195,7 +158,9 @@ public class SettingsActivity extends AppCompatActivity {
             Preference restorePref = findPreference("restore_settings");
             if (restorePref != null) {
                 restorePref.setOnPreferenceClickListener(preference -> {
-                    mRestoreLauncher.launch(new String[]{"application/json", "text/plain"});
+                    if (getActivity() instanceof SettingsActivity) {
+                        ((SettingsActivity) getActivity()).mRestoreLauncher.launch(new String[]{"application/json", "text/plain"});
+                    }
                     return true;
                 });
             }
@@ -209,9 +174,7 @@ public class SettingsActivity extends AppCompatActivity {
                             .setPositiveButton("初期化", (dialog, which) -> {
                                 SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(requireContext());
                                 prefs.edit().clear().apply();
-                                // レイアウトファイルも削除
                                 LayoutManager.clearLayouts(requireContext());
-                                // デフォルト値を再適用
                                 InputService.setupDefaultPreferences(requireContext());
                                 Toast.makeText(requireContext(), "設定を初期化しました", Toast.LENGTH_SHORT).show();
                                 if (getActivity() != null) {
@@ -224,120 +187,172 @@ public class SettingsActivity extends AppCompatActivity {
                 });
             }
         }
+    }
 
-        private void backupSettings(Uri uri) {
-            if (uri == null) {
-                return;
-            }
-            try (OutputStream os = getContext().getContentResolver().openOutputStream(uri, "wt")) {
-                SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(getContext());
-                Map<String, ?> allEntries = prefs.getAll();
-                TreeMap<String, Object> sortedMap = new TreeMap<>();
-
-                // まずは通常の SharedPreferences を入れる
-                for (Map.Entry<String, ?> entry : allEntries.entrySet()) {
-                    String key = entry.getKey();
-                    Object value = entry.getValue();
-
-                    // レイアウト関連のキーは後で個別に処理するためここでは除外
-                    if (key.endsWith("_normal") || key.endsWith("_shift") || key.endsWith("_symbol") ||
-                            key.endsWith("_primary") || key.endsWith("_secondary")) {
-                        continue;
-                    }
-                    sortedMap.put(key, value);
-                }
-
-                // LayoutManager から独立したレイアウトを取得
-                for (String key : LayoutManager.getManagedKeys()) {
-                    String layoutStr = LayoutManager.loadLayout(getContext(), key, null);
-                    if (layoutStr != null) {
-                        sortedMap.put(key, KeyConfig.layoutFromAnyString(layoutStr));
-                    }
-                }
-
-                StringBuilder sb = new StringBuilder();
-                sb.append("{\n");
-                int count = 0;
-                int total = sortedMap.size();
-                for (Map.Entry<String, Object> entry : sortedMap.entrySet()) {
-                    sb.append("  \"").append(entry.getKey()).append("\": ");
-                    Object val = entry.getValue();
-                    if (val instanceof KeyConfig[][]) {
-                        // 配列（レイアウト）は特定の整形を行う
-                        sb.append(KeyConfig.layoutToJsonString((KeyConfig[][]) val));
-                    } else if (val instanceof String) {
-                        sb.append(JSONObject.quote((String) val));
-                    } else {
-                        sb.append(val);
-                    }
-                    if (++count < total) sb.append(",");
-                    sb.append("\n");
-                }
-                sb.append("}");
-
-                os.write(sb.toString().getBytes(StandardCharsets.UTF_8));
-                Toast.makeText(getContext(), "バックアップを保存しました", Toast.LENGTH_SHORT).show();
-            } catch (Exception e) {
-                Toast.makeText(getContext(), "バックアップの保存に失敗しました: " + e.getMessage(), Toast.LENGTH_LONG).show();
-            }
+    /**
+     * 入力・変換設定サブ画面のフラグメントクラスです。
+     */
+    public static class InputSettingsFragment extends PreferenceFragmentCompat {
+        @Override
+        public void onCreatePreferences(Bundle savedInstanceState, String rootKey) {
+            setPreferencesFromResource(R.xml.preferences_input, rootKey);
         }
+    }
 
-        private void restoreSettings(Uri uri) {
-            if (uri == null) {
-                return;
-            }
-            try (InputStream is = getContext().getContentResolver().openInputStream(uri);
-                 BufferedReader reader = new BufferedReader(new InputStreamReader(is, StandardCharsets.UTF_8))) {
+    /**
+     * 物理キーボード設定サブ画面のフラグメントクラスです。
+     */
+    public static class PhysicalKeyboardSettingsFragment extends PreferenceFragmentCompat {
+        @Override
+        public void onCreatePreferences(Bundle savedInstanceState, String rootKey) {
+            setPreferencesFromResource(R.xml.preferences_physical_keyboard, rootKey);
+        }
+    }
 
-                StringBuilder sb = new StringBuilder();
-                String line;
-                while ((line = reader.readLine()) != null) {
-                    sb.append(line);
+    /**
+     * 表示設定サブ画面のフラグメントクラスです。
+     */
+    public static class DisplaySettingsFragment extends PreferenceFragmentCompat {
+        @Override
+        public void onCreatePreferences(Bundle savedInstanceState, String rootKey) {
+            setPreferencesFromResource(R.xml.preferences_display, rootKey);
+        }
+    }
+
+    /**
+     * 画面キーボード設定サブ画面のフラグメントクラスです。
+     */
+    public static class KeyboardSettingsFragment extends PreferenceFragmentCompat {
+        @Override
+        public void onCreatePreferences(Bundle savedInstanceState, String rootKey) {
+            setPreferencesFromResource(R.xml.preferences_screen_keyboard, rootKey);
+        }
+    }
+
+    /**
+     * 辞書・学習設定サブ画面のフラグメントクラスです。
+     */
+    public static class DictionarySettingsFragment extends PreferenceFragmentCompat {
+        @Override
+        public void onCreatePreferences(Bundle savedInstanceState, String rootKey) {
+            setPreferencesFromResource(R.xml.preferences_dictionary, rootKey);
+        }
+    }
+
+    /**
+     * 現在の設定（SharedPreferences およびキーボードレイアウト）を JSON ファイルにバックアップします。
+     *
+     * @param uri 保存先ファイルの URI
+     */
+    private void backupSettings(Uri uri) {
+        if (uri == null) {
+            return;
+        }
+        try (OutputStream os = getContentResolver().openOutputStream(uri, "wt")) {
+            SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(this);
+            Map<String, ?> allEntries = prefs.getAll();
+            TreeMap<String, Object> sortedMap = new TreeMap<>();
+
+            for (Map.Entry<String, ?> entry : allEntries.entrySet()) {
+                String key = entry.getKey();
+                Object value = entry.getValue();
+
+                if (key.endsWith("_normal") || key.endsWith("_shift") || key.endsWith("_symbol") ||
+                        key.endsWith("_primary") || key.endsWith("_secondary")) {
+                    continue;
                 }
-
-                JSONObject json = new JSONObject(sb.toString());
-                SharedPreferences.Editor editor = PreferenceManager.getDefaultSharedPreferences(getContext()).edit();
-
-                java.util.Iterator<String> keys = json.keys();
-                while (keys.hasNext()) {
-                    String key = keys.next();
-                    Object value = json.get(key);
-
-                    if (value instanceof JSONArray) {
-                        // 構造化されたレイアウトをファイルに保存
-                        String jsonStr = value.toString();
-                        LayoutManager.saveLayout(getContext(), key, jsonStr);
-                    } else if (value instanceof Boolean) {
-                        editor.putBoolean(key, (Boolean) value);
-                    } else if (value instanceof Integer) {
-                        editor.putInt(key, (Integer) value);
-                    } else if (value instanceof Long) {
-                        editor.putLong(key, (Long) value);
-                    } else if (value instanceof Float) {
-                        editor.putFloat(key, (Float) value);
-                    } else if (value instanceof String) {
-                        editor.putString(key, (String) value);
-                    }
-                }
-                // レイアウト更新を通知
-                editor.putLong(LayoutManager.PREF_LAYOUT_UPDATED, System.currentTimeMillis());
-                editor.apply();
-                Toast.makeText(getContext(), "設定を復元しました", Toast.LENGTH_SHORT).show();
-                getActivity().recreate();
-            } catch (Exception e) {
-                Toast.makeText(getContext(), "復元に失敗しました: " + e.getMessage(), Toast.LENGTH_LONG).show();
+                sortedMap.put(key, value);
             }
+
+            for (String key : LayoutManager.getManagedKeys()) {
+                String layoutStr = LayoutManager.loadLayout(this, key, null);
+                if (layoutStr != null) {
+                    sortedMap.put(key, KeyConfig.layoutFromAnyString(layoutStr));
+                }
+            }
+
+            StringBuilder sb = new StringBuilder();
+            sb.append("{\n");
+            int count = 0;
+            int total = sortedMap.size();
+            for (Map.Entry<String, Object> entry : sortedMap.entrySet()) {
+                sb.append("  \"").append(entry.getKey()).append("\": ");
+                Object val = entry.getValue();
+                if (val instanceof KeyConfig[][]) {
+                    sb.append(KeyConfig.layoutToJsonString((KeyConfig[][]) val));
+                } else if (val instanceof String) {
+                    sb.append(JSONObject.quote((String) val));
+                } else {
+                    sb.append(val);
+                }
+                if (++count < total) sb.append(",");
+                sb.append("\n");
+            }
+            sb.append("}");
+
+            os.write(sb.toString().getBytes(StandardCharsets.UTF_8));
+            Toast.makeText(this, "バックアップを保存しました", Toast.LENGTH_SHORT).show();
+        } catch (Exception e) {
+            Toast.makeText(this, "バックアップの保存に失敗しました: " + e.getMessage(), Toast.LENGTH_LONG).show();
+        }
+    }
+
+    /**
+     * 指定された JSON ファイルから設定およびキーボードレイアウトを復元します。
+     *
+     * @param uri 読み込み元ファイルの URI
+     */
+    private void restoreSettings(Uri uri) {
+        if (uri == null) {
+            return;
+        }
+        try (InputStream is = getContentResolver().openInputStream(uri);
+             BufferedReader reader = new BufferedReader(new InputStreamReader(is, StandardCharsets.UTF_8))) {
+
+            StringBuilder sb = new StringBuilder();
+            String line;
+            while ((line = reader.readLine()) != null) {
+                sb.append(line);
+            }
+
+            JSONObject json = new JSONObject(sb.toString());
+            SharedPreferences.Editor editor = PreferenceManager.getDefaultSharedPreferences(this).edit();
+
+            Iterator<String> keys = json.keys();
+            while (keys.hasNext()) {
+                String key = keys.next();
+                Object value = json.get(key);
+
+                if (value instanceof JSONArray) {
+                    String jsonStr = value.toString();
+                    LayoutManager.saveLayout(this, key, jsonStr);
+                } else if (value instanceof Boolean) {
+                    editor.putBoolean(key, (Boolean) value);
+                } else if (value instanceof Integer) {
+                    editor.putInt(key, (Integer) value);
+                } else if (value instanceof Long) {
+                    editor.putLong(key, (Long) value);
+                } else if (value instanceof Float) {
+                    editor.putFloat(key, (Float) value);
+                } else if (value instanceof String) {
+                    editor.putString(key, (String) value);
+                }
+            }
+            editor.putLong(LayoutManager.PREF_LAYOUT_UPDATED, System.currentTimeMillis());
+            editor.apply();
+            Toast.makeText(this, "設定を復元しました", Toast.LENGTH_SHORT).show();
+            recreate();
+        } catch (Exception e) {
+            Toast.makeText(this, "復元に失敗しました: " + e.getMessage(), Toast.LENGTH_LONG).show();
         }
     }
 
     /**
      * assets/legal_info.txt から法的情報を読み込んでダイアログ表示します。
-     * フラグメント側を汚さないよう、アクティビティ側のメソッドとして分離しています。
      */
     private void showLegalInfoDialog() {
         StringBuilder markdownBuilder = new StringBuilder();
 
-        // try-with-resources による安全な自動クローズ
         try (InputStream inputStream = getAssets().open("legal_info.txt");
              InputStreamReader streamReader = new InputStreamReader(inputStream, StandardCharsets.UTF_8);
              BufferedReader reader = new BufferedReader(streamReader)) {
@@ -347,30 +362,16 @@ public class SettingsActivity extends AppCompatActivity {
                 markdownBuilder.append(line).append("\n");
             }
 
-            // 2. 簡易マークダウン ➡️ HTML 置換処理
             String htmlText = markdownBuilder.toString();
-
-            // バックォート3つ（```）で囲まれたコードブロックの置換処理
             htmlText = htmlText.replaceAll("(?s)```(.*?)```", "<br><tt>$1</tt><br>");
-
-            // 見出しの置換 (### と ##)
             htmlText = htmlText.replaceAll("(?m)^###\\s+(.+)$", "<br><b>◆ $1</b><br>");
             htmlText = htmlText.replaceAll("(?m)^##\\s+(.+)$", "<br><b>■ $1</b><hr>");
-
-            // 太字の置換 (**text**)
             htmlText = htmlText.replaceAll("\\*\\*(.*?)\\*\\*", "<b>$1</b>");
-
-            // 箇条書きの置換 (- 文字)
             htmlText = htmlText.replaceAll("(?m)^-\\s+(.+)$", "・ $1<br>");
-
-            // 改行の保持（マークダウンの改行をHTMLの<br>に変換）
             htmlText = htmlText.replaceAll("\n", "<br>");
 
-            // 3. HTML文字列をAndroidのリッチテキスト(Spanned)に変換
-            Spanned spannedText;
-            spannedText = Html.fromHtml(htmlText, Html.FROM_HTML_MODE_LEGACY);
+            Spanned spannedText = Html.fromHtml(htmlText, Html.FROM_HTML_MODE_LEGACY);
 
-            // 4. ダイアログにセットして表示
             new AlertDialog.Builder(this)
                     .setTitle("法的情報・ライセンス")
                     .setMessage(spannedText)

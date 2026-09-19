@@ -1,7 +1,5 @@
 package io.github.kachaya.skk.engine;
 
-import android.view.KeyEvent;
-
 /**
  * 送り仮名入力中（▽）の状態を管理するクラスです。
  * <p>
@@ -77,27 +75,45 @@ public enum SKKStateOkurigana implements SKKState {
      * 送り入力中は、モード側によるカーソル移動をブロックします。
      *
      * @param context SKKエンジンのコンテキスト
-     * @param keyCode キーコード
+     * @param action  割り当てられている CtrlAction
      * @return イベントを消費した場合は true
      */
     @Override
-    public boolean processCtrlKey(SKKEngine context, int keyCode) {
-        switch (keyCode) {
-            case KeyEvent.KEYCODE_J:
+    public boolean processCtrlKey(SKKEngine context, CtrlAction action) {
+        switch (action) {
+            case KANA_KEY:
                 context.handleKanaKey();
                 return true;
-            case KeyEvent.KEYCODE_G:
+            case CANCEL:
                 return handleCancel(context);
-            case KeyEvent.KEYCODE_Q:
+            case TOGGLE_KANA:
                 context.toggleKana();
                 return true;
-
-            // カーソル移動のガード: 送り入力中はエディタのカーソル移動を抑制する
-            case KeyEvent.KEYCODE_P:
-            case KeyEvent.KEYCODE_N:
-            case KeyEvent.KEYCODE_B:
-            case KeyEvent.KEYCODE_F:
+            case TOGGLE_EN_JP:
+                context.toggleEnglishJapanese();
                 return true;
+            case DELETE_CHAR:
+                context.handleBackspace();
+                return true;
+            case LAUNCH_SETTINGS:
+                context.launchSettings();
+                return true;
+            case OPEN_EMOJI:
+                context.openEmojiPicker();
+                return true;
+
+            // カーソル移動・編集のガード: 送り入力中はエディタの移動や削除を抑制する
+            case CURSOR_UP:
+            case CURSOR_DOWN:
+            case CURSOR_LEFT:
+            case CURSOR_RIGHT:
+            case FORWARD_DELETE:
+            case LINE_START:
+            case LINE_END:
+            case KILL_LINE:
+                return true;
+            default:
+                break;
         }
         return false;
     }

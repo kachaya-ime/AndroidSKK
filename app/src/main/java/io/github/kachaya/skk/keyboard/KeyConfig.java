@@ -129,7 +129,7 @@ public class KeyConfig {
             case CODE_RIGHT:
                 return "▸";
             case CODE_SYM:
-                return "Sym";
+                return "@!?";
             case CODE_GAP:
                 return "Gap";
             case CODE_ABC:
@@ -171,7 +171,9 @@ public class KeyConfig {
     }
 
     /**
-     * キーボードの修飾キー（Shift, Ctrl, Sym 等）の状態を保持するクラスです。
+     * このキーが長押しによるリピート入力（連打）に対応しているかどうかを判定します。
+     *
+     * @return リピート入力対応キーなら true
      */
     public boolean isRepeatable() {
         switch (code) {

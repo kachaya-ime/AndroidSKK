@@ -17,6 +17,10 @@ class RomajiMap {
      */
     private final Map<String, Node> mMap = new HashMap<>();
 
+    boolean isEmpty() {
+        return mMap.isEmpty();
+    }
+
     /**
      * 基本的なかな変換ルールを追加します。
      *

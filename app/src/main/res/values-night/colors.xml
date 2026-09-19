@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Dark Theme Neutral Variant Palette Overrides -->
+    <color name="neutral_variant_10">#191C1E</color> <!-- キーボード背景 -->
+    <color name="neutral_variant_20">#2E3133</color> <!-- 文字ボタン背景 -->
+    <color name="neutral_variant_30">#44474E</color> <!-- 選択状態 -->
+    <color name="neutral_variant_40">#5B5F66</color> <!-- 押下状態 -->
+    <color name="neutral_variant_70">#A8ABB3</color>
+    <color name="neutral_variant_90">#E1E2E9</color> <!-- 文字色 -->
+
+    <!-- Functional Accent Palette -->
+    <color name="function_bg_tint">#202932</color>
+
+    <!-- Composing Colors -->
+    <color name="composing_composing">#33A6C8FF</color>
+    <color name="composing_converting">#4DFFD54F</color>
+
+    <!-- ストローク軌跡の色 -->
+    <color name="stroke_line_color">#FFFFFF</color>
+
+    <!-- ツールチップ -->
+    <color name="tooltip_fg">#F0F0F0</color>
+    <color name="tooltip_bg">#CC383838</color>
+    <color name="tooltip_border">#A0B0B0B0</color>
+</resources>

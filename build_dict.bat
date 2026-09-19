@@ -12,6 +12,16 @@ if exist work (
     rmdir /s /q work
 )
 
+rem Run EmojiConverter via Gradle
+echo Converting Emoji dictionary...
+call gradlew.bat :tool:runEmojiConverter
+if %ERRORLEVEL% neq 0 (
+    echo Error: EmojiConverter failed.
+    pause
+    exit /b %ERRORLEVEL%
+)
+
+echo.
 rem Run SudachiDictConverter via Gradle (Converts Sudachi dictionary and builds SKK binary dictionary)
 echo Converting Sudachi dictionary and building SKK binary dictionary...
 call gradlew.bat :tool:runSudachiDictConverter

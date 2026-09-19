@@ -34,6 +34,11 @@
             android:exported="false"
             android:label="キー配列のカスタマイズ">
         </activity>
+        <activity
+            android:name=".CtrlShortcutActivity"
+            android:exported="false"
+            android:label="Ctrlキーショートカットの設定">
+        </activity>
 
         <service
             android:name=".InputService"

@@ -1,7 +1,10 @@
 package io.github.kachaya.skk;
 
+import android.annotation.SuppressLint;
 import android.content.Context;
 import android.content.SharedPreferences;
+import android.content.res.Configuration;
+import android.graphics.Color;
 import android.util.Log;
 import android.util.TypedValue;
 import android.view.ContextThemeWrapper;
@@ -11,20 +14,27 @@ import android.view.KeyEvent;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.ViewTreeObserver;
 import android.view.inputmethod.EditorInfo;
 import android.widget.Button;
 import android.widget.HorizontalScrollView;
 import android.widget.LinearLayout;
+import android.widget.PopupWindow;
+import android.widget.ScrollView;
+import android.widget.TextView;
 
 import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
 import androidx.preference.PreferenceManager;
 
+import com.google.android.flexbox.FlexboxLayout;
+
 import java.util.List;
 
 import io.github.kachaya.skk.engine.Candidate;
 import io.github.kachaya.skk.keyboard.DefaultLayouts;
+import io.github.kachaya.skk.keyboard.EmojiKeyboardView;
 import io.github.kachaya.skk.keyboard.KeyConfig;
 import io.github.kachaya.skk.keyboard.KeyboardState;
 import io.github.kachaya.skk.keyboard.KeyboardView;
@@ -48,17 +58,24 @@ public class InputView extends LinearLayout {
     private final InputService mInputService;
     /** 候補ボタンを格納するコンテナレイアウト。 */
     private final LinearLayout mCandidatesLayout;
+    /** 候補バーの全体レイアウト。 */
+    private final View mCandidateBarLayout;
 
     // 設定項目
     /** 候補表示エリアのスクロール制御用ビュー。 */
     private final HorizontalScrollView mCandidatesView;
     /** 記号ボタンセットを配置するコンテナレイアウト。 */
     private final LinearLayout mKeyboardLayout;
+    /** 展開表示用のスクロールビュー。 */
+    private ScrollView mCandidateExpandedScroll;
+    /** 展開表示用のFlexboxレイアウト。 */
+    private FlexboxLayout mCandidateExpandedFlexbox;
+    /** 候補の展開・折りたたみボタン。 */
+    private Button mBtnExpandCandidates;
+    /** 候補が展開されているかどうかのフラグ。 */
+    private boolean mIsExpanded = false;
 
     private KeyboardView mCurrentKeyboardView;
-
-    /** 候補表示中にキーボードエリアを隠し、候補のみを表示するかどうかの設定。 */
-    private boolean mInputSingleLine;
 
     // キーボードの状態
     /** 触覚フィードバック（バイブレーション）の有効フラグ。 */
@@ -78,6 +95,10 @@ public class InputView extends LinearLayout {
     private String mStrokeAlign;
     /** ストロークキーボードの幅の倍率。 */
     private float mStrokeWidthScale;
+    /** Tablet キーボードの寄せ方向 ("left", "center", "right")。 */
+    private String mTabletAlign;
+    /** Tablet キーボードの幅の倍率。 */
+    private float mTabletWidthScale;
 
     /** QWERTY キーボードでの Shift 状態。 */
     private boolean mIsShifted = false;
@@ -112,15 +133,33 @@ public class InputView extends LinearLayout {
      * @param context コンテキスト
      */
     public InputView(Context context) {
-        super(context);
-        mInputService = (InputService) context;
+        this(context instanceof InputService ? (InputService) context : null, InputService.getThemedContext(context));
+    }
+
+    /**
+     * InputView インスタンスを生成し、初期セットアップを行います。
+     * レイアウトのインフレート、各ビューの取得、およびトグルボタンの生成を含みます。
+     *
+     * @param inputService 入力サービス
+     * @param themedContext テーマ適用済みコンテキスト
+     */
+    public InputView(InputService inputService, Context themedContext) {
+        super(themedContext);
+        mInputService = inputService;
 
         readPrefs();
 
-        View layout = LayoutInflater.from(context).inflate(R.layout.input, this);
+        View layout = LayoutInflater.from(themedContext).inflate(R.layout.input, this);
+        mCandidateBarLayout = layout.findViewById(R.id.candidate_bar_layout);
         mCandidatesView = layout.findViewById(R.id.candidate_view);
         mCandidatesLayout = layout.findViewById(R.id.candidates_layout);
         mKeyboardLayout = layout.findViewById(R.id.keyboard_layout);
+        mCandidateExpandedScroll = layout.findViewById(R.id.candidate_expanded_scroll);
+        mCandidateExpandedFlexbox = layout.findViewById(R.id.candidate_expanded_flexbox);
+        mBtnExpandCandidates = layout.findViewById(R.id.btn_expand_candidates);
+        if (mBtnExpandCandidates != null) {
+            mBtnExpandCandidates.setOnClickListener(v -> toggleExpanded());
+        }
         hideCandidatesView();
 
         // システムナビゲーションバー（3ボタンナビ等）との重なりを防止するためのインセット処理
@@ -138,6 +177,10 @@ public class InputView extends LinearLayout {
 
     @Override
     protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
+        if ("none".equals(mKeyboardType)) {
+            super.onMeasure(widthMeasureSpec, MeasureSpec.makeMeasureSpec(1, MeasureSpec.EXACTLY));
+            return;
+        }
         // 小さい画面（Motorola Razrのアウトディスプレイ等）でIMEが画面を占領しすぎないよう、
         // 全体の高さを画面の半分までに制限します。
         // ただし、最小サイズを確保した結果それを超える場合は操作性を優先します。
@@ -148,10 +191,13 @@ public class InputView extends LinearLayout {
         if ("stroke".equals(mKeyboardType)) {
             int baseSize = Math.min(screenWidth, screenHeight);
             expectedKeyboardHeight = (int) (baseSize * mStrokeWidthScale) / 2;
+        } else if ("emoji".equals(mKeyboardType)) {
+            expectedKeyboardHeight = mAdjustedButtonHeight * 5;
         } else {
             expectedKeyboardHeight = mAdjustedButtonHeight * mRowCount;
         }
-        int maxHeight = Math.max(screenHeight / 2, mAdjustedCandidateHeight + expectedKeyboardHeight) + getPaddingBottom();
+        int candidateHeight = (mCandidateBarLayout != null && mCandidateBarLayout.getVisibility() != GONE) ? mAdjustedCandidateHeight : 0;
+        int maxHeight = Math.max(screenHeight / 2, candidateHeight + expectedKeyboardHeight) + getPaddingBottom();
 
         int heightMode = MeasureSpec.getMode(heightMeasureSpec);
         int heightSize = MeasureSpec.getSize(heightMeasureSpec);
@@ -169,7 +215,7 @@ public class InputView extends LinearLayout {
     }
 
     @Override
-    protected void onConfigurationChanged(android.content.res.Configuration newConfig) {
+    protected void onConfigurationChanged(Configuration newConfig) {
         super.onConfigurationChanged(newConfig);
         // 画面の向きやサイズが変わった際に高さを再計算する
         readPrefs();
@@ -196,17 +242,17 @@ public class InputView extends LinearLayout {
     public void readPrefs() {
         SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(getContext());
 
-        boolean singleLine = prefs.getBoolean("input_single_line", false);
         boolean haptic = prefs.getBoolean("haptic_feedback", true);
 
         // 物理キーボードの有無に応じてデフォルト値を決定
-        android.content.res.Configuration config = getContext().getResources().getConfiguration();
-        boolean hasHardwareKeyboard = (config.keyboard != android.content.res.Configuration.KEYBOARD_NOKEYS &&
-                config.keyboard != android.content.res.Configuration.KEYBOARD_UNDEFINED);
+        Configuration config = getContext().getResources().getConfiguration();
+        boolean hasHardwareKeyboard = (config.keyboard != Configuration.KEYBOARD_NOKEYS &&
+                config.keyboard != Configuration.KEYBOARD_UNDEFINED);
         String defaultType = hasHardwareKeyboard ? "symbols" : "qwerty";
 
         String type = prefs.getString("keyboard_type", defaultType);
         mStrokeAlign = prefs.getString("stroke_align", "right");
+        mTabletAlign = prefs.getString("tablet_align", "right");
         float strokeWidthScale = 1.0f;
         try {
             strokeWidthScale = Float.parseFloat(prefs.getString("stroke_width_scale", "1.0"));
@@ -215,9 +261,22 @@ public class InputView extends LinearLayout {
         }
         mStrokeWidthScale = strokeWidthScale;
 
+        float tabletWidthScale = 1.0f;
+        try {
+            tabletWidthScale = Float.parseFloat(prefs.getString("tablet_width_scale", "1.0"));
+        } catch (Exception e) {
+            // ignore
+        }
+        mTabletWidthScale = tabletWidthScale;
+
         float heightScale = 1.0f;
         try {
-            heightScale = Float.parseFloat(prefs.getString("keyboard_height_scale", "1.0"));
+            String heightPrefKey = "keyboard_height_scale_" + type;
+            String heightVal = prefs.getString(heightPrefKey, null);
+            if (heightVal == null) {
+                heightVal = prefs.getString("keyboard_height_scale", "1.0");
+            }
+            heightScale = Float.parseFloat(heightVal);
         } catch (Exception e) {
             // ignore
         }
@@ -240,15 +299,17 @@ public class InputView extends LinearLayout {
                 !type.equals(mKeyboardType) ||
                         updatedAt != mLayoutUpdatedAt ||
                         mStrokeWidthScale != strokeWidthScale ||
+                        mTabletWidthScale != tabletWidthScale ||
                         !mStrokeAlign.equals(prefs.getString("stroke_align", "right")) ||
-                        mInputSingleLine != (singleLine && "symbols".equals(type))
+                        !mTabletAlign.equals(prefs.getString("tablet_align", "right"))
         );
         mStrokeAlign = prefs.getString("stroke_align", "right");
+        mTabletAlign = prefs.getString("tablet_align", "right");
         mStrokeWidthScale = strokeWidthScale;
+        mTabletWidthScale = tabletWidthScale;
 
         mHapticEnabled = haptic;
         mKeyboardType = type;
-        mInputSingleLine = singleLine && "symbols".equals(type);
         mLayoutUpdatedAt = updatedAt;
 
         // 画面の高さに応じてボタンの高さを調整する（Motorola Razrのアウトディスプレイ等への対応）
@@ -256,8 +317,8 @@ public class InputView extends LinearLayout {
         float density = getResources().getDisplayMetrics().density;
         int defaultButtonHeight = (int) (getResources().getDimension(R.dimen.button_height) * heightScale);
 
-        // レイアウトの行数を取得する（QWERTYは4行とは限らない。ストロークはキーを持たない）
-        if ("stroke".equals(type)) {
+        // レイアウトの行数を取得する（QWERTYは4行とは限らない。ストローク・なしはキーを持たない）
+        if ("stroke".equals(type) || "none".equals(type)) {
             mRowCount = 0; // キーを持たない
         } else if ("symbols".equals(type)) {
             mRowCount = 1;
@@ -268,9 +329,9 @@ public class InputView extends LinearLayout {
             mRowCount = Math.max(1, layout.length);
         }
 
-        // ストロークキーボードの場合はキーをタッチするわけではない（キー自体が存在しない）ので、
+        // ストローク・なしキーボードの場合はキーをタッチするわけではない（キー自体が存在しない）ので、
         // 最小高さの制限を設けない
-        int minButtonHeight = "stroke".equals(type) ? 0 : (int) (32 * density);
+        int minButtonHeight = ("stroke".equals(type) || "none".equals(type)) ? 0 : (int) (32 * density);
 
         // 各キーボードの行数 + 候補（1行）の計が「使用可能な画面の半分」に収まるように制限
         // ナビゲーションバーのパディング（getPaddingBottom）を差し引いた高さを基準にする
@@ -280,6 +341,8 @@ public class InputView extends LinearLayout {
             // ストロークの場合、キーボードの高さは幅に依存するため、
             // ここでは候補ビューのための「標準的な」高さを確保するために 5 行分（4行+候補1行）として計算
             totalRows = 5;
+        } else if ("none".equals(type)) {
+            totalRows = 1;
         } else {
             totalRows = mRowCount + 1;
         }
@@ -333,34 +396,53 @@ public class InputView extends LinearLayout {
 
         int height = LayoutParams.WRAP_CONTENT;
 
-        switch (mKeyboardType) {
-            case "tablet":
-                TabletKeyboardView tv = new TabletKeyboardView(getContext());
-                tv.setRowHeight(mAdjustedButtonHeight);
-                tv.setOnKeyActionListener(this::onClickKey);
-                mCurrentKeyboardView = tv;
-                break;
-            case "qwerty":
-                QwertyKeyboardView qv = new QwertyKeyboardView(getContext());
-                qv.setRowHeight(mAdjustedButtonHeight);
-                qv.setOnKeyActionListener(this::onClickKey);
-                mCurrentKeyboardView = qv;
-                break;
-            case "stroke":
-                StrokeKeyboardView sv = new StrokeKeyboardView(getContext());
-                sv.setOnKeyActionListener(this::onClickKey);
-                sv.setOnHelpListener(() -> mInputService.showStrokeHelp());
-                mCurrentKeyboardView = sv;
-                // ストロークエリアの高さは、幅（baseSize * scale）の半分として計算される
-                int baseSize = Math.min(getResources().getDisplayMetrics().widthPixels, getResources().getDisplayMetrics().heightPixels);
-                height = (int) (baseSize * mStrokeWidthScale) / 2;
-                break;
-            default:
-                SymbolKeyboardView syv = new SymbolKeyboardView(getContext());
-                syv.setOnKeyActionListener(this::onClickKey);
-                mCurrentKeyboardView = syv;
-                height = mAdjustedButtonHeight;
-                break;
+        if ("none".equals(mKeyboardType)) {
+            setBackgroundColor(Color.TRANSPARENT);
+            if (mCandidateBarLayout != null) mCandidateBarLayout.setVisibility(GONE);
+            if (mCandidateExpandedScroll != null) mCandidateExpandedScroll.setVisibility(GONE);
+            mKeyboardLayout.setVisibility(GONE);
+            height = 1;
+        } else {
+            setBackground(null);
+            if (mCandidateExpandedScroll != null) mCandidateExpandedScroll.setVisibility(GONE);
+            mKeyboardLayout.setVisibility(VISIBLE);
+
+            switch (mKeyboardType) {
+                case "tablet":
+                    TabletKeyboardView tv = new TabletKeyboardView(getContext());
+                    tv.setRowHeight(mAdjustedButtonHeight);
+                    tv.setOnKeyActionListener(this::onClickKey);
+                    mCurrentKeyboardView = tv;
+                    break;
+                case "qwerty":
+                    QwertyKeyboardView qv = new QwertyKeyboardView(getContext());
+                    qv.setRowHeight(mAdjustedButtonHeight);
+                    qv.setOnKeyActionListener(this::onClickKey);
+                    mCurrentKeyboardView = qv;
+                    break;
+                case "stroke":
+                    StrokeKeyboardView sv = new StrokeKeyboardView(getContext());
+                    sv.setOnKeyActionListener(this::onClickKey);
+                    sv.setOnHelpListener(() -> mInputService.showStrokeHelp());
+                    mCurrentKeyboardView = sv;
+                    // ストロークエリアの高さは、幅（baseSize * scale）の半分として計算される
+                    int baseSize = Math.min(getResources().getDisplayMetrics().widthPixels, getResources().getDisplayMetrics().heightPixels);
+                    height = (int) (baseSize * mStrokeWidthScale) / 2;
+                    break;
+                case "emoji":
+                    EmojiKeyboardView ev = new EmojiKeyboardView(getContext());
+                    ev.setOnKeyActionListener(this::onClickKey);
+                    mCurrentKeyboardView = ev;
+                    height = mAdjustedButtonHeight * 5;
+                    break;
+                case "symbols":
+                default:
+                    SymbolKeyboardView syv = new SymbolKeyboardView(getContext());
+                    syv.setOnKeyActionListener(this::onClickKey);
+                    mCurrentKeyboardView = syv;
+                    height = mAdjustedButtonHeight;
+                    break;
+            }
         }
 
         if (mCurrentKeyboardView != null) {
@@ -378,10 +460,60 @@ public class InputView extends LinearLayout {
                     gravity = Gravity.START;
                 }
                 lp.gravity = gravity;
+            } else if (mCurrentKeyboardView instanceof TabletKeyboardView) {
+                int screenWidth = getResources().getDisplayMetrics().widthPixels;
+                int targetWidth = (int) (screenWidth * mTabletWidthScale);
+                lp.width = (mTabletWidthScale >= 1.0f) ? LayoutParams.MATCH_PARENT : targetWidth;
+
+                int gravity = Gravity.END;
+                if ("left".equals(mTabletAlign)) {
+                    gravity = Gravity.START;
+                }
+                lp.gravity = gravity;
             }
             mKeyboardLayout.addView(mCurrentKeyboardView, lp);
         }
         updateKeys();
+        if (!restarting) {
+            hideCandidatesView();
+        } else if (mInputService != null) {
+            mInputService.requestUIUpdate();
+        }
+    }
+
+    /**
+     * 絵文字ピッカー（候補ビューイメージのキーボード領域表示）を表示します。
+     */
+    public void showEmojiPicker() {
+        if (mKeyboardLayout != null) {
+            mKeyboardLayout.removeAllViews();
+            EmojiKeyboardView ev = new EmojiKeyboardView(getContext());
+            ev.setOnKeyActionListener(this::onClickKey);
+            ev.setOnCloseListener(this::hideEmojiPicker);
+            mCurrentKeyboardView = ev;
+            int height = mAdjustedButtonHeight * 5;
+            LayoutParams lp = new LayoutParams(LayoutParams.MATCH_PARENT, height);
+            mKeyboardLayout.addView(ev, lp);
+            mKeyboardLayout.setVisibility(VISIBLE);
+        }
+    }
+
+    /**
+     * 絵文字ピッカーを閉じ、通常のキーボードビューに戻します。
+     */
+    public void hideEmojiPicker() {
+        if (mLastEditorInfo != null) {
+            doStartInputView(mLastEditorInfo, true);
+        }
+    }
+
+    /**
+     * 絵文字ピッカーが表示中かどうかを判定します。
+     *
+     * @return 表示中の場合は true
+     */
+    public boolean isEmojiPickerShowing() {
+        return mCurrentKeyboardView instanceof EmojiKeyboardView;
     }
 
     /**
@@ -427,6 +559,10 @@ public class InputView extends LinearLayout {
         }
         if (!mIsSymbolLocked && mIsSymbol) {
             mIsSymbol = false;
+            changed = true;
+        }
+        if (mIsControl) {
+            mIsControl = false;
             changed = true;
         }
         if (changed) {
@@ -481,8 +617,19 @@ public class InputView extends LinearLayout {
                     mIsControl = false;
                     updateKeys();
                     break;
+                case KeyConfig.CODE_ABC:
+                    mIsSymbol = false;
+                    mIsSymbolLocked = false;
+                    mIsControl = false;
+                    mIsShifted = mIsShiftLocked;
+                    updateKeys();
+                    break;
                 case KeyConfig.CODE_TAB:
-                    mInputService.handleTab(mIsShifted);
+                    if (mIsControl) {
+                        mInputService.handleCtrlKey(KeyEvent.KEYCODE_TAB);
+                    } else {
+                        mInputService.handleTab(mIsShifted);
+                    }
                     resetModifiers();
                     break;
                 case KeyConfig.CODE_LEFT:
@@ -502,35 +649,55 @@ public class InputView extends LinearLayout {
                     resetModifiers();
                     break;
                 case KeyConfig.CODE_BACKSPACE:
-                    mInputService.handleBackspace();
+                    if (mIsControl) {
+                        mInputService.handleCtrlKey(KeyEvent.KEYCODE_DEL);
+                    } else {
+                        mInputService.handleBackspace();
+                    }
                     resetModifiers();
                     break;
                 case KeyConfig.CODE_ENTER:
-                    mInputService.handleEnter();
+                    if (mIsControl) {
+                        mInputService.handleCtrlKey(KeyEvent.KEYCODE_ENTER);
+                    } else {
+                        mInputService.handleEnter();
+                    }
                     resetModifiers();
                     break;
                 case KeyConfig.CODE_SPACE:
-                    mInputService.processKey(' ');
+                    if (mIsControl) {
+                        mInputService.handleCtrlKey(KeyEvent.KEYCODE_SPACE);
+                    } else {
+                        mInputService.processKey(' ');
+                    }
                     resetModifiers();
                     break;
             }
         } else {
             String key = config.label;
-            if (key != null && key.length() == 1) {
-                if (mIsControl) {
-                    int keyCode = getKeyCode(key.charAt(0));
-                    if (keyCode != KeyEvent.KEYCODE_UNKNOWN) {
-                        mInputService.handleCtrlKey(keyCode);
+            if (key != null && !key.isEmpty()) {
+                if (mCurrentKeyboardView instanceof EmojiKeyboardView) {
+                    mInputService.commitText(key, 1);
+                    resetModifiers();
+                } else if (key.length() == 1) {
+                    if (mIsControl) {
+                        int keyCode = getKeyCode(key.charAt(0));
+                        if (keyCode != KeyEvent.KEYCODE_UNKNOWN) {
+                            mInputService.handleCtrlKey(keyCode);
+                        }
+                        mIsControl = false;
+                        mIsShifted = mIsShiftLocked;
+                        updateKeys();
+                    } else {
+                        char c = key.charAt(0);
+                        if (mIsShifted) {
+                            c = Character.toUpperCase(c);
+                        }
+                        mInputService.processKey(c);
+                        resetModifiers();
                     }
-                    mIsControl = false;
-                    mIsShifted = mIsShiftLocked;
-                    updateKeys();
                 } else {
-                    char c = key.charAt(0);
-                    if (mIsShifted) {
-                        c = Character.toUpperCase(c);
-                    }
-                    mInputService.processKey(c);
+                    mInputService.commitText(key, 1);
                     resetModifiers();
                 }
             }
@@ -578,11 +745,73 @@ public class InputView extends LinearLayout {
         mInputService.pickCandidateViewManually(index);
     }
 
+    private void toggleExpanded() {
+        mIsExpanded = !mIsExpanded;
+        updateExpansionState();
+    }
+
+    private void updateExpansionState() {
+        int screenHeight = getResources().getDisplayMetrics().heightPixels;
+        int screenWidth = getResources().getDisplayMetrics().widthPixels;
+        int expectedKeyboardHeight;
+        if ("stroke".equals(mKeyboardType)) {
+            int baseSize = Math.min(screenWidth, screenHeight);
+            expectedKeyboardHeight = (int) (baseSize * mStrokeWidthScale) / 2;
+        } else {
+            expectedKeyboardHeight = mAdjustedButtonHeight * mRowCount;
+        }
+
+        if (mIsExpanded) {
+            mKeyboardLayout.setVisibility(GONE);
+            if (mCandidateExpandedScroll != null) {
+                ViewGroup.LayoutParams lp = mCandidateExpandedScroll.getLayoutParams();
+                lp.height = expectedKeyboardHeight;
+                mCandidateExpandedScroll.setLayoutParams(lp);
+                mCandidateExpandedScroll.setVisibility(VISIBLE);
+
+                // Gboardのように、展開時に現在選択中（または1行表示の右端付近）の候補位置へスクロールして続きを表示
+                mCandidateExpandedScroll.post(() -> {
+                    if (mCandidateButton != null && mCandidateExpandedFlexbox != null) {
+                        int selectedIdx = 0;
+                        for (int i = 0; i < mCandidateButton.length; i++) {
+                            if (mCandidateButton[i].isSelected()) {
+                                selectedIdx = i;
+                                break;
+                            }
+                        }
+                        View selectedChip = mCandidateExpandedFlexbox.getChildAt(selectedIdx);
+                        if (selectedChip != null) {
+                            int chipTop = selectedChip.getTop() + mCandidateExpandedFlexbox.getTop();
+                            mCandidateExpandedScroll.scrollTo(0, Math.max(0, chipTop - (int) (8 * getResources().getDisplayMetrics().density)));
+                        }
+                    }
+                });
+            }
+            if (mBtnExpandCandidates != null) {
+                mBtnExpandCandidates.setText("▲");
+            }
+        } else {
+            mKeyboardLayout.setVisibility(VISIBLE);
+            if (mCandidateExpandedScroll != null) {
+                mCandidateExpandedScroll.setVisibility(GONE);
+            }
+            if (mBtnExpandCandidates != null) {
+                mBtnExpandCandidates.setText("▼");
+            }
+        }
+        requestLayout();
+    }
+
     /**
      * 候補表示エリアの内容を完全にクリアします。
      */
     private void clearCandidates() {
-        mCandidatesLayout.removeAllViews();
+        if (mCandidatesLayout != null) {
+            mCandidatesLayout.removeAllViews();
+        }
+        if (mCandidateExpandedFlexbox != null) {
+            mCandidateExpandedFlexbox.removeAllViews();
+        }
         mCandidateButton = null;
     }
 
@@ -600,7 +829,7 @@ public class InputView extends LinearLayout {
 
         mCandidateButton = new Button[candidates.size()];
         int style = R.style.CandidateButton;
-        LayoutParams lp = new LinearLayout.LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.MATCH_PARENT);
+        LayoutParams lp = new LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.MATCH_PARENT);
 
         for (int i = 0; i < candidates.size(); i++) {
             Button b = new Button(new ContextThemeWrapper(getContext(), style), null, style);
@@ -610,6 +839,13 @@ public class InputView extends LinearLayout {
             b.setText(candidates.get(i));
             mCandidatesLayout.addView(b, lp);
             mCandidateButton[i] = b;
+
+            TextView chip = (TextView) LayoutInflater.from(getContext()).inflate(R.layout.candidate_chip_item, mCandidateExpandedFlexbox, false);
+            chip.setTextSize(TypedValue.COMPLEX_UNIT_PX, mAdjustedCandidateTextSize);
+            chip.setText(candidates.get(i));
+            chip.setOnClickListener(this::onClickCandidateButton);
+            chip.setTag(i);
+            mCandidateExpandedFlexbox.addView(chip);
         }
         selectCandidate(0);
     }
@@ -626,12 +862,11 @@ public class InputView extends LinearLayout {
         }
 
         mCandidateButton = new Button[candidates.size()];
-        LayoutParams lp = new LinearLayout.LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.MATCH_PARENT);
+        LayoutParams lp = new LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.MATCH_PARENT);
 
         for (int i = 0; i < candidates.size(); i++) {
             Candidate c = candidates.get(i);
 
-            // 辞書の種類に応じて適用するスタイルを切り替える
             int style = c.isUserDict ? R.style.UserCandidateButton : R.style.CandidateButton;
 
             Button b = new Button(new ContextThemeWrapper(getContext(), style), null, style);
@@ -644,9 +879,15 @@ public class InputView extends LinearLayout {
                 label += ";" + c.annotation;
             }
             b.setText(label);
-
             mCandidatesLayout.addView(b, lp);
             mCandidateButton[i] = b;
+
+            TextView chip = (TextView) LayoutInflater.from(getContext()).inflate(R.layout.candidate_chip_item, mCandidateExpandedFlexbox, false);
+            chip.setTextSize(TypedValue.COMPLEX_UNIT_PX, mAdjustedCandidateTextSize);
+            chip.setText(label);
+            chip.setOnClickListener(this::onClickCandidateButton);
+            chip.setTag(i);
+            mCandidateExpandedFlexbox.addView(chip);
         }
         selectCandidate(0);
     }
@@ -668,40 +909,447 @@ public class InputView extends LinearLayout {
             final Button selectedButton = mCandidateButton[index];
             selectedButton.setSelected(true);
 
-            // スクロール位置の計算：選択されたボタンが中央に配置されるように調整
             int buttonLeft = selectedButton.getLeft();
             int buttonWidth = selectedButton.getWidth();
             int viewWidth = mCandidatesView.getWidth();
             int scrollToX = buttonLeft + (buttonWidth / 2) - (viewWidth / 2);
             mCandidatesView.scrollTo(scrollToX, 0);
+
+            if (mCandidateExpandedFlexbox != null && mCandidateExpandedScroll != null) {
+                for (int i = 0; i < mCandidateExpandedFlexbox.getChildCount(); i++) {
+                    View child = mCandidateExpandedFlexbox.getChildAt(i);
+                    child.setSelected(i == index);
+                }
+                View selectedChip = mCandidateExpandedFlexbox.getChildAt(index);
+                if (selectedChip != null) {
+                    float density = getResources().getDisplayMetrics().density;
+                    int padding = (int) (8 * density);
+                    int chipTop = selectedChip.getTop() + mCandidateExpandedFlexbox.getTop();
+                    int chipBottom = chipTop + selectedChip.getHeight();
+
+                    int scrollY = mCandidateExpandedScroll.getScrollY();
+                    int viewHeight = mCandidateExpandedScroll.getHeight();
+
+                    if (viewHeight > 0) {
+                        if (chipTop < scrollY + padding) {
+                            mCandidateExpandedScroll.smoothScrollTo(0, Math.max(0, chipTop - padding));
+                        } else if (chipBottom > scrollY + viewHeight - padding) {
+                            mCandidateExpandedScroll.smoothScrollTo(0, chipBottom - viewHeight + padding);
+                        }
+                    }
+                }
+            }
         });
     }
 
     /**
      * 候補表示エリアを可視化します。
-     * 1行表示設定が有効な場合は、キーボードエリアを非表示にして候補エリアを優先します。
+     * フローティング候補表示が有効な場合は候補エリアを非表示 (GONE) にします。
      */
     public void showCandidatesView() {
-        mCandidatesView.setVisibility(VISIBLE);
-        if (mInputSingleLine) {
-            mKeyboardLayout.setVisibility(GONE);
-        } else {
+        if (mInputService != null && mInputService.isFloatingCandidateEnabled()) {
+            if (mCandidateBarLayout != null) mCandidateBarLayout.setVisibility(GONE);
+            if (mCandidatesView != null) mCandidatesView.setVisibility(GONE);
+            if (mBtnExpandCandidates != null) mBtnExpandCandidates.setVisibility(GONE);
+            if (mCandidateExpandedScroll != null) mCandidateExpandedScroll.setVisibility(GONE);
             mKeyboardLayout.setVisibility(VISIBLE);
+            return;
         }
+        if (mCandidateBarLayout != null) mCandidateBarLayout.setVisibility(VISIBLE);
+        if (mCandidatesView != null) mCandidatesView.setVisibility(VISIBLE);
+        if (mBtnExpandCandidates != null) mBtnExpandCandidates.setVisibility(VISIBLE);
+        updateExpansionState();
     }
 
     /**
      * 候補表示エリアを非表示にします。
-     * 1行表示設定の状態に応じて、候補エリアを完全に消す（GONE）か、透明にする（INVISIBLE）かを選択します。    /**
-     * QWERTY キーボードの場合は常に領域を確保（INVISIBLE）します。
      */
     public void hideCandidatesView() {
-        if (mInputSingleLine) {
-            mCandidatesView.setVisibility(GONE);
-        } else {
-            mCandidatesView.setVisibility(INVISIBLE);
-        }
+        mIsExpanded = false;
+        if (mCandidateBarLayout != null) mCandidateBarLayout.setVisibility(GONE);
+        if (mCandidatesView != null) mCandidatesView.setVisibility(GONE);
+        if (mBtnExpandCandidates != null) mBtnExpandCandidates.setVisibility(GONE);
+        if (mCandidateExpandedScroll != null) mCandidateExpandedScroll.setVisibility(GONE);
         mKeyboardLayout.setVisibility(VISIBLE);
+        updateExpansionState();
+    }
+
+    private PopupWindow mCandidatePopup;
+
+    public void hideFloatingCandidates() {
+        hideFullWidthCandidatePopup();
+    }
+
+    public void hideFullWidthCandidatePopup() {
+        if (mCandidatePopup != null && mCandidatePopup.isShowing()) {
+            mCandidatePopup.dismiss();
+        }
+    }
+
+    public void updateCandidatePopupPosition() {
+        if (mCandidatePopup == null || !mCandidatePopup.isShowing()) {
+            return;
+        }
+        if (mInputService != null && mInputService.isCursorInvisible()) {
+            mCandidatePopup.dismiss();
+            return;
+        }
+
+        int[] coordsAndSize = calculateCandidatePopupScreenCoordinates(mCandidatePopup.getContentView());
+        showPopupAtScreenLocationWithSize(mCandidatePopup, coordsAndSize[0], coordsAndSize[1],
+                getResources().getDisplayMetrics().widthPixels, coordsAndSize[2]);
+    }
+
+    @SuppressLint("DiscouragedApi")
+    private int getStatusBarHeight() {
+        WindowInsetsCompat insets = ViewCompat.getRootWindowInsets(this);
+        if (insets != null) {
+            Insets systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars());
+            if (systemBars.top > 0) {
+                return systemBars.top;
+            }
+        }
+        int resourceId = getResources().getIdentifier("status_bar_height", "dimen", "android");
+        if (resourceId > 0) {
+            return getResources().getDimensionPixelSize(resourceId);
+        }
+        return 0;
+    }
+
+    private int calculateTopMaxHeight(View contentView) {
+        View header = contentView.findViewById(R.id.candidate_header);
+        int headerHeight = (header != null && header.getVisibility() == View.VISIBLE) ? header.getMeasuredHeight() : 0;
+
+        FlexboxLayout flexbox = contentView.findViewById(R.id.candidate_flexbox);
+        int rowHeight = 0;
+        if (flexbox != null && flexbox.getChildCount() > 0) {
+            for (int i = 0; i < flexbox.getChildCount(); i++) {
+                View child = flexbox.getChildAt(i);
+                int h = child.getMeasuredHeight();
+                if (h > rowHeight) {
+                    rowHeight = h;
+                }
+            }
+            if (rowHeight == 0) {
+                rowHeight = (int) (40 * getResources().getDisplayMetrics().density);
+            }
+            View firstChild = flexbox.getChildAt(0);
+            if (firstChild != null && firstChild.getLayoutParams() instanceof MarginLayoutParams) {
+                MarginLayoutParams lp = (MarginLayoutParams) firstChild.getLayoutParams();
+                rowHeight += lp.topMargin + lp.bottomMargin;
+            } else {
+                rowHeight += (int) (6 * getResources().getDisplayMetrics().density);
+            }
+        } else {
+            rowHeight = (int) (44 * getResources().getDisplayMetrics().density);
+        }
+
+        // 4 rows of chips + header + padding
+        return headerHeight + (4 * rowHeight) + (int) (16 * getResources().getDisplayMetrics().density);
+    }
+
+    private int[] calculateCandidatePopupScreenCoordinates(View contentView) {
+        int screenWidth = getResources().getDisplayMetrics().widthPixels;
+        int screenHeight = getResources().getDisplayMetrics().heightPixels;
+        float density = getResources().getDisplayMetrics().density;
+        int margin = (int) (2 * density);
+
+        int keyboardTop = screenHeight;
+        if (isShown()) {
+            int[] loc = new int[2];
+            getLocationOnScreen(loc);
+            if (loc[1] > 0) {
+                keyboardTop = loc[1];
+            }
+        }
+
+        float cursorTop = mInputService != null ? mInputService.getCursorTop() : 0;
+        float cursorBottom = mInputService != null ? mInputService.getCursorBottom() : 0;
+
+        float caretTop = Math.min(cursorTop, cursorBottom);
+        float caretBottom = Math.max(cursorTop, cursorBottom);
+
+        int statusBarHeight = getStatusBarHeight();
+        int spaceTop = Math.max(0, (int) caretTop - statusBarHeight - margin);
+        int spaceBottom = Math.max(0, keyboardTop - (int) caretBottom - margin);
+
+        boolean useTop = (spaceTop >= spaceBottom);
+        int chosenSpace = useTop ? spaceTop : spaceBottom;
+
+        contentView.measure(MeasureSpec.makeMeasureSpec(screenWidth, MeasureSpec.EXACTLY),
+                MeasureSpec.UNSPECIFIED);
+        int measuredContentHeight = contentView.getMeasuredHeight();
+
+        int allowedMaxHeight;
+        if (useTop) {
+            int max4LinesHeight = calculateTopMaxHeight(contentView);
+            allowedMaxHeight = Math.min(chosenSpace, max4LinesHeight);
+        } else {
+            allowedMaxHeight = Math.max((int) (40 * density), chosenSpace);
+        }
+
+        int finalPopupHeight = Math.min(measuredContentHeight, allowedMaxHeight);
+
+        int targetX = 0;
+        int targetY;
+
+        if (useTop) {
+            targetY = (int) caretTop - finalPopupHeight - margin;
+        } else {
+            targetY = (int) caretBottom + margin;
+        }
+
+        targetY = Math.max(statusBarHeight, Math.min(targetY, Math.max(statusBarHeight, keyboardTop - finalPopupHeight)));
+
+        return new int[]{targetX, targetY, finalPopupHeight};
+    }
+
+    private void showPopupAtScreenLocationWithSize(PopupWindow popup, int screenX, int screenY, int width, int height) {
+        View anchor = getRootView();
+        if (anchor == null) anchor = this;
+
+        int[] loc = new int[2];
+        anchor.getLocationOnScreen(loc);
+
+        int x = screenX - loc[0];
+        int y = screenY - loc[1];
+
+        try {
+            if (popup.isShowing()) {
+                popup.update(x, y, width, height);
+            } else {
+                popup.setClippingEnabled(false);
+                popup.showAtLocation(anchor, Gravity.NO_GRAVITY, x, y);
+                popup.update(x, y, width, height);
+            }
+        } catch (Exception e) {
+            // ignore
+        }
+    }
+
+    public void navigateCandidateFlexbox2D(int dRow, int dCol) {
+        if (mCandidatePopup == null || !mCandidatePopup.isShowing()) {
+            return;
+        }
+        View popupView = mCandidatePopup.getContentView();
+        if (popupView == null) return;
+        FlexboxLayout flexbox = popupView.findViewById(R.id.candidate_flexbox);
+        if (flexbox == null || flexbox.getChildCount() == 0) return;
+
+        int count = flexbox.getChildCount();
+        int currentIdx = mInputService != null ? mInputService.getCurrentCandidateIndex() : 0;
+
+        if (dCol != 0) {
+            int nextIdx = currentIdx + (dCol > 0 ? 1 : -1);
+            if (nextIdx >= 0 && nextIdx < count) {
+                if (mInputService != null) mInputService.setCandidateIndex(nextIdx);
+            }
+            return;
+        }
+
+        if (dRow != 0) {
+            View currentChip = flexbox.getChildAt(currentIdx);
+            if (currentChip == null) return;
+
+            int currX = currentChip.getLeft() + currentChip.getWidth() / 2;
+            int currY = currentChip.getTop() + currentChip.getHeight() / 2;
+            int chipHeight = currentChip.getHeight();
+
+            int bestIndex = -1;
+            double minDistance = Double.MAX_VALUE;
+
+            for (int i = 0; i < count; i++) {
+                if (i == currentIdx) continue;
+                View targetChip = flexbox.getChildAt(i);
+                if (targetChip == null) continue;
+
+                int targetX = targetChip.getLeft() + targetChip.getWidth() / 2;
+                int targetY = targetChip.getTop() + targetChip.getHeight() / 2;
+
+                boolean isCorrectVerticalDirection;
+                if (dRow > 0) {
+                    isCorrectVerticalDirection = (targetY >= currY + chipHeight * 0.4f);
+                } else {
+                    isCorrectVerticalDirection = (targetY <= currY - chipHeight * 0.4f);
+                }
+
+                if (isCorrectVerticalDirection) {
+                    int dy = Math.abs(targetY - currY);
+                    int dx = Math.abs(targetX - currX);
+                    double distance = (dy * dy) + (dx * dx * 2.5);
+
+                    if (distance < minDistance) {
+                        minDistance = distance;
+                        bestIndex = i;
+                    }
+                }
+            }
+
+            if (bestIndex != -1) {
+                if (mInputService != null) mInputService.setCandidateIndex(bestIndex);
+            } else {
+                if (mInputService != null) {
+                    if (dRow > 0 && currentIdx < count - 1) {
+                        mInputService.setCandidateIndex(count - 1);
+                    } else if (dRow < 0 && currentIdx > 0) {
+                        mInputService.setCandidateIndex(0);
+                    }
+                }
+            }
+        }
+    }
+
+    public void showCandidateFlexboxPopup(String header, List<String> items, int selectedIdx) {
+        int screenWidth = getResources().getDisplayMetrics().widthPixels;
+
+        View popupView = null;
+        if (mCandidatePopup != null && mCandidatePopup.isShowing()) {
+            View current = mCandidatePopup.getContentView();
+            if (current != null && current.findViewById(R.id.candidate_flexbox) != null) {
+                popupView = current;
+            }
+        }
+
+        if (popupView == null) {
+            LayoutInflater inflater = LayoutInflater.from(getContext());
+            popupView = inflater.inflate(R.layout.candidate_floating, null);
+
+            if (mCandidatePopup != null && mCandidatePopup.isShowing()) {
+                mCandidatePopup.setContentView(popupView);
+            } else {
+                mCandidatePopup = new PopupWindow(popupView, screenWidth, ViewGroup.LayoutParams.WRAP_CONTENT);
+                mCandidatePopup.setFocusable(false);
+                mCandidatePopup.setAnimationStyle(0);
+            }
+        }
+
+        final View finalPopupView = popupView;
+        TextView headerView = finalPopupView.findViewById(R.id.candidate_header);
+        FlexboxLayout flexbox = finalPopupView.findViewById(R.id.candidate_flexbox);
+
+        if (headerView != null) {
+            if (header != null && !header.isEmpty()) {
+                headerView.setVisibility(View.VISIBLE);
+                headerView.setText(header);
+            } else {
+                headerView.setVisibility(View.GONE);
+            }
+        }
+
+        if (flexbox != null && items != null) {
+            boolean sameSize = (flexbox.getChildCount() == items.size());
+            if (sameSize) {
+                for (int i = 0; i < items.size(); i++) {
+                    View child = flexbox.getChildAt(i);
+                    if (child instanceof TextView) {
+                        TextView chip = (TextView) child;
+                        chip.setText(items.get(i));
+                        chip.setSelected(i == selectedIdx);
+                    }
+                }
+                scrollToSelectedChip(finalPopupView, flexbox, selectedIdx);
+            } else {
+                flexbox.removeAllViews();
+                LayoutInflater inflater = LayoutInflater.from(getContext());
+                for (int i = 0; i < items.size(); i++) {
+                    TextView chip = (TextView) inflater.inflate(R.layout.candidate_chip_item, flexbox, false);
+                    chip.setText(items.get(i));
+                    final int index = i;
+                    chip.setOnClickListener(v -> {
+                        if (mInputService != null) {
+                            mInputService.pickCandidateViewManually(index);
+                        }
+                    });
+                    chip.setSelected(i == selectedIdx);
+                    flexbox.addView(chip);
+                }
+
+                flexbox.getViewTreeObserver().addOnGlobalLayoutListener(new ViewTreeObserver.OnGlobalLayoutListener() {
+                    @Override
+                    public void onGlobalLayout() {
+                        flexbox.getViewTreeObserver().removeOnGlobalLayoutListener(this);
+                        scrollToSelectedChip(finalPopupView, flexbox, selectedIdx);
+                    }
+                });
+            }
+        }
+
+        int[] coordsAndSize = calculateCandidatePopupScreenCoordinates(finalPopupView);
+        showPopupAtScreenLocationWithSize(mCandidatePopup, coordsAndSize[0], coordsAndSize[1], screenWidth, coordsAndSize[2]);
+    }
+
+    private void scrollToSelectedChip(View popupView, FlexboxLayout flexbox, int selectedIdx) {
+        if (selectedIdx < 0 || selectedIdx >= flexbox.getChildCount()) {
+            return;
+        }
+        ScrollView scroll = popupView.findViewById(R.id.candidate_scroll);
+        View selectedChip = flexbox.getChildAt(selectedIdx);
+        if (scroll != null && selectedChip != null) {
+            float density = getResources().getDisplayMetrics().density;
+            int padding = (int) (8 * density);
+
+            int chipTop = selectedChip.getTop() + flexbox.getTop();
+            int chipBottom = chipTop + selectedChip.getHeight();
+
+            int scrollY = scroll.getScrollY();
+            int viewHeight = scroll.getHeight();
+
+            if (viewHeight <= 0) {
+                scroll.post(() -> scrollToSelectedChip(popupView, flexbox, selectedIdx));
+                return;
+            }
+
+            if (chipTop - padding < scrollY) {
+                scroll.smoothScrollTo(0, Math.max(0, chipTop - padding));
+            } else if (chipBottom + padding > (scrollY + viewHeight)) {
+                scroll.smoothScrollTo(0, chipBottom + padding - viewHeight);
+            }
+        }
+    }
+
+    private void showFullWidthCandidatePopup(String text) {
+        int screenWidth = getResources().getDisplayMetrics().widthPixels;
+
+        View view = null;
+        if (mCandidatePopup != null && mCandidatePopup.isShowing()) {
+            View current = mCandidatePopup.getContentView();
+            if (current != null && current.findViewById(R.id.tooltip_text) != null) {
+                view = current;
+            }
+        }
+
+        if (view != null) {
+            setTooltipViewText(view, text);
+            updateCandidatePopupPosition();
+        } else {
+            LayoutInflater inflater = LayoutInflater.from(getContext());
+            view = inflater.inflate(R.layout.tooltip_view, null);
+            setTooltipViewText(view, text);
+
+            int[] coordsAndSize = calculateCandidatePopupScreenCoordinates(view);
+            int targetHeight = coordsAndSize[2];
+
+            if (mCandidatePopup != null && mCandidatePopup.isShowing()) {
+                mCandidatePopup.setContentView(view);
+                updateCandidatePopupPosition();
+            } else {
+                mCandidatePopup = new PopupWindow(view, screenWidth, targetHeight);
+                mCandidatePopup.setFocusable(false);
+                mCandidatePopup.setAnimationStyle(0);
+
+                showPopupAtScreenLocationWithSize(mCandidatePopup, coordsAndSize[0], coordsAndSize[1], screenWidth, targetHeight);
+            }
+        }
+    }
+
+    private void setTooltipViewText(View popupContentView, String text) {
+        if (popupContentView == null) return;
+        TextView tv = popupContentView.findViewById(R.id.tooltip_text);
+        if (tv != null) {
+            tv.setText(text);
+        } else if (popupContentView instanceof TextView) {
+            ((TextView) popupContentView).setText(text);
+        }
     }
 
 }

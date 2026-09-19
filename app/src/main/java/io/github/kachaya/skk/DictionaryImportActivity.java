@@ -6,6 +6,7 @@ import android.net.Uri;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.view.MenuItem;
 import android.widget.Button;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
@@ -14,6 +15,7 @@ import android.widget.TextView;
 import androidx.activity.result.ActivityResult;
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
+import androidx.appcompat.app.ActionBar;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 
@@ -43,6 +45,11 @@ public class DictionaryImportActivity extends AppCompatActivity {
         setContentView(R.layout.activity_dictionary_import);
         mDictionary = new Dictionary(this);
 
+        ActionBar actionBar = getSupportActionBar();
+        if (actionBar != null) {
+            actionBar.setDisplayHomeAsUpEnabled(true);
+        }
+
         Button btnDownload = findViewById(R.id.btn_download_skk);
         Button btnImport = findViewById(R.id.btn_import_skk);
         Button btnClear = findViewById(R.id.btn_clear_imported);
@@ -56,6 +63,23 @@ public class DictionaryImportActivity extends AppCompatActivity {
         if (btnClear != null) {
             btnClear.setOnClickListener(v -> onClickClearImportedDictionary());
         }
+    }
+
+    @Override
+    public boolean onOptionsItemSelected(MenuItem item) {
+        if (item.getItemId() == android.R.id.home) {
+            finish();
+            return true;
+        }
+        return super.onOptionsItemSelected(item);
+    }
+
+    @Override
+    protected void onDestroy() {
+        if (mDictionary != null) {
+            mDictionary.close();
+        }
+        super.onDestroy();
     }
 
     /**
@@ -116,6 +140,11 @@ public class DictionaryImportActivity extends AppCompatActivity {
         mImportResultLauncher.launch(intent);
     }
 
+    /**
+     * ファイル選択ピッカーの結果を処理します。
+     *
+     * @param result アクティビティ実行結果
+     */
     private void onImportActivityResult(ActivityResult result) {
         if (result.getResultCode() == Activity.RESULT_OK && result.getData() != null) {
             Uri uri = result.getData().getData();
@@ -125,6 +154,11 @@ public class DictionaryImportActivity extends AppCompatActivity {
         }
     }
 
+    /**
+     * インポート対象ファイルの文字コード選択ダイアログを表示します。
+     *
+     * @param uri 選択されたファイルの URI
+     */
     private void showEncodingSelectionDialog(Uri uri) {
         String[] encodings = new String[]{"自動判定（推奨）", "EUC-JP (SKK本家辞書 SKK-JISYO.L 等)", "UTF-8"};
         new AlertDialog.Builder(this)
@@ -138,6 +172,12 @@ public class DictionaryImportActivity extends AppCompatActivity {
                 .show();
     }
 
+    /**
+     * バックグラウンドスレッドで辞書ファイルのインポート処理を実行します。
+     *
+     * @param uri          インポート対象ファイルの URI
+     * @param encodingMode 文字コードモード（0: 自動判定, 1: EUC-JP, 2: UTF-8）
+     */
     private void startImportProcess(Uri uri, int encodingMode) {
         LinearLayout layout = new LinearLayout(this);
         layout.setOrientation(LinearLayout.VERTICAL);
@@ -234,6 +274,9 @@ public class DictionaryImportActivity extends AppCompatActivity {
         });
     }
 
+    /**
+     * インポート済み追加辞書の全件消去（クリア）ダイアログを表示・実行します。
+     */
     private void onClickClearImportedDictionary() {
         new AlertDialog.Builder(this)
                 .setTitle("インポート辞書のクリア")
