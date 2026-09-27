@@ -109,6 +109,28 @@ public class SKKEngine {
     private ConversionInfo mLastConversion = null;
     /** Ctrl キーショートカットの割り当てマップ。 */
     private Map<Integer, CtrlAction> mCtrlShortcutMap = null;
+    /** 後から変換（Ctrl-L / Ctrl-R）で抽出され、エディタから削除された元の文字列。キャンセル時に復元するために使用されます。 */
+    private String mPostConversionOriginalText = null;
+    /** 後から変換がカーソル後であったかどうか（trueの場合はカーソル後、falseの場合はカーソル前）。 */
+    private boolean mPostConversionIsAfterCursor = false;
+
+    /**
+     * 後から変換（Ctrl-L / Ctrl-R）がキャンセルされた際に、
+     * エディタから削除された元の文字列を復元します。
+     */
+    public void restorePostConversion() {
+        if (mPostConversionOriginalText != null) {
+            InputConnection ic = mService.getCurrentInputConnection();
+            if (ic != null) {
+                if (mPostConversionIsAfterCursor) {
+                    ic.commitText(mPostConversionOriginalText, 0);
+                } else {
+                    ic.commitText(mPostConversionOriginalText, 1);
+                }
+            }
+            mPostConversionOriginalText = null;
+        }
+    }
 
 
     /**
@@ -698,6 +720,7 @@ public class SKKEngine {
             regInfo.entry.append(text);
         } else if (mService != null) {
             mService.commitText(text, newCursorPosition);
+            mPostConversionOriginalText = null;
         }
     }
 
@@ -1456,6 +1479,9 @@ public class SKKEngine {
         // エディタ上のカーソル前の該当文字列（targetHeadword の長さ分）を削除
         ic.deleteSurroundingText(targetHeadword.length(), 0);
 
+        mPostConversionOriginalText = targetHeadword;
+        mPostConversionIsAfterCursor = false;
+
         // SKKエンジンの見出し語にセットして変換開始
         mHeadword.setLength(0);
         mHeadword.append(targetHeadword);
@@ -1528,6 +1554,9 @@ public class SKKEngine {
 
         // エディタ上のカーソル以降の該当文字列（targetHeadword の長さ分）を削除
         ic.deleteSurroundingText(0, targetHeadword.length());
+
+        mPostConversionOriginalText = targetHeadword;
+        mPostConversionIsAfterCursor = true;
 
         // SKKエンジンの見出し語にセットして変換開始
         mHeadword.setLength(0);
@@ -2249,6 +2278,7 @@ public class SKKEngine {
      * 辞書以外の実行時キャッシュをクリアし、初期の確定モード（Direct）へ戻る準備を整えます。
      */
     public void reset() {
+        mPostConversionOriginalText = null;
         clearBuffers();
         mRegistrationStack.clear();
         if (mService != null) {
@@ -2320,6 +2350,9 @@ public class SKKEngine {
      * @param state 新しい状態
      */
     public void changeState(SKKState state) {
+        if (state == SKKStateDirect.INSTANCE && mState != SKKStateDirect.INSTANCE) {
+            restorePostConversion();
+        }
         mState.onExitState(this);
         mState = state;
         mState.onEnterState(this);
