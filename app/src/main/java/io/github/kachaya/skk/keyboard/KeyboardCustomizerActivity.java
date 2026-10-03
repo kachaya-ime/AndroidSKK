@@ -402,7 +402,7 @@ public class KeyboardCustomizerActivity extends AppCompatActivity {
         view.setOnClickListener(v -> {
             if (mHapticEnabled) {
                 v.setHapticFeedbackEnabled(true);
-                v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP, HapticFeedbackConstants.FLAG_IGNORE_GLOBAL_SETTING);
+                v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
             }
             if (isInKeyboard || config.code == KeyConfig.CODE_GAP || "GAP".equals(config.label)) {
                 showKeyEditDialog(config);
@@ -413,7 +413,7 @@ public class KeyboardCustomizerActivity extends AppCompatActivity {
         view.setOnLongClickListener(v -> {
             if (mHapticEnabled) {
                 v.setHapticFeedbackEnabled(true);
-                v.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS, HapticFeedbackConstants.FLAG_IGNORE_GLOBAL_SETTING);
+                v.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
             }
             ClipData.Item item = new ClipData.Item(config.toString());
             ClipData dragData = new ClipData(config.toString(), new String[]{ClipDescription.MIMETYPE_TEXT_PLAIN}, item);
@@ -595,7 +595,7 @@ public class KeyboardCustomizerActivity extends AppCompatActivity {
             }
             fillPaletteDummies(mPaletteSpecial, specialKeys.size());
 
-            List<KeyConfig> alphaKeys = LayoutManager.getAlphaKeysPalette(mTargetPrefKey);
+            List<KeyConfig> alphaKeys = LayoutManager.getAlphaKeysPalette();
             for (KeyConfig config : alphaKeys) {
                 mPaletteAlpha.addView(createKeyView(config, false));
             }
@@ -652,10 +652,6 @@ public class KeyboardCustomizerActivity extends AppCompatActivity {
         }
     }
 
-    private List<String> serializeAllRows() {
-        return null; // 不使用
-    }
-
     /**
      * 現在プレビューコンテナに配置されているキー構成を JSON 文字列にシリアライズします。
      *
@@ -695,7 +691,7 @@ public class KeyboardCustomizerActivity extends AppCompatActivity {
         // 変更を通知するために SharedPreferences を更新
         PreferenceManager.getDefaultSharedPreferences(this).edit()
                 .putLong(LayoutManager.PREF_LAYOUT_UPDATED, System.currentTimeMillis())
-                .commit();
+                .apply();
 
         Toast.makeText(this, "配置を保存しました", Toast.LENGTH_SHORT).show();
     }

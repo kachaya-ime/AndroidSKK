@@ -7,7 +7,6 @@ import android.content.res.Configuration;
 import android.graphics.Color;
 import android.util.Log;
 import android.util.TypedValue;
-import android.view.ContextThemeWrapper;
 import android.view.Gravity;
 import android.view.HapticFeedbackConstants;
 import android.view.KeyEvent;
@@ -30,7 +29,10 @@ import androidx.preference.PreferenceManager;
 
 import com.google.android.flexbox.FlexboxLayout;
 
+import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 import io.github.kachaya.skk.engine.Candidate;
 import io.github.kachaya.skk.keyboard.DefaultLayouts;
@@ -67,11 +69,11 @@ public class InputView extends LinearLayout {
     /** 記号ボタンセットを配置するコンテナレイアウト。 */
     private final LinearLayout mKeyboardLayout;
     /** 展開表示用のスクロールビュー。 */
-    private ScrollView mCandidateExpandedScroll;
+    private final ScrollView mCandidateExpandedScroll;
     /** 展開表示用のFlexboxレイアウト。 */
-    private FlexboxLayout mCandidateExpandedFlexbox;
+    private final FlexboxLayout mCandidateExpandedFlexbox;
     /** 候補の展開・折りたたみボタン。 */
-    private Button mBtnExpandCandidates;
+    private final Button mBtnExpandCandidates;
     /** 候補が展開されているかどうかのフラグ。 */
     private boolean mIsExpanded = false;
 
@@ -80,6 +82,10 @@ public class InputView extends LinearLayout {
     // キーボードの状態
     /** 触覚フィードバック（バイブレーション）の有効フラグ。 */
     private boolean mHapticEnabled;
+    /** 候補表示時の注釈（アノテーション）表示フラグ。 */
+    private boolean mShowAnnotation = true;
+    /** 候補がない状態でも候補バーを表示し続けるフラグ。 */
+    private boolean mKeepCandidateBarVisible;
 
     /** 画面サイズに合わせて調整されたボタンの高さ。 */
     private int mAdjustedButtonHeight;
@@ -147,8 +153,6 @@ public class InputView extends LinearLayout {
         super(themedContext);
         mInputService = inputService;
 
-        readPrefs();
-
         View layout = LayoutInflater.from(themedContext).inflate(R.layout.input, this);
         mCandidateBarLayout = layout.findViewById(R.id.candidate_bar_layout);
         mCandidatesView = layout.findViewById(R.id.candidate_view);
@@ -161,6 +165,8 @@ public class InputView extends LinearLayout {
             mBtnExpandCandidates.setOnClickListener(v -> toggleExpanded());
         }
         hideCandidatesView();
+
+        readPrefs();
 
         // システムナビゲーションバー（3ボタンナビ等）との重なりを防止するためのインセット処理
         ViewCompat.setOnApplyWindowInsetsListener(this, (v, insets) -> {
@@ -196,7 +202,7 @@ public class InputView extends LinearLayout {
         } else {
             expectedKeyboardHeight = mAdjustedButtonHeight * mRowCount;
         }
-        int candidateHeight = (mCandidateBarLayout != null && mCandidateBarLayout.getVisibility() != GONE) ? mAdjustedCandidateHeight : 0;
+        int candidateHeight = (mCandidateBarLayout != null && mCandidateBarLayout.getVisibility() != GONE) ? (mCandidateBarLayout.getHeight() > 0 ? mCandidateBarLayout.getHeight() : mAdjustedCandidateHeight) : 0;
         int maxHeight = Math.max(screenHeight / 2, candidateHeight + expectedKeyboardHeight) + getPaddingBottom();
 
         int heightMode = MeasureSpec.getMode(heightMeasureSpec);
@@ -228,7 +234,7 @@ public class InputView extends LinearLayout {
      */
     private void logI(String msg) {
         if (BuildConfig.DEBUG) {
-            Log.i("InputView", msg);
+            Log.i(getClass().getSimpleName(), msg);
         }
     }
 
@@ -243,14 +249,20 @@ public class InputView extends LinearLayout {
         SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(getContext());
 
         boolean haptic = prefs.getBoolean("haptic_feedback", true);
+        mShowAnnotation = prefs.getBoolean("show_annotation", true);
+        mKeepCandidateBarVisible = prefs.getBoolean("keep_candidate_bar_visible", false);
 
         // 物理キーボードの有無に応じてデフォルト値を決定
         Configuration config = getContext().getResources().getConfiguration();
         boolean hasHardwareKeyboard = (config.keyboard != Configuration.KEYBOARD_NOKEYS &&
-                config.keyboard != Configuration.KEYBOARD_UNDEFINED);
+                config.keyboard != Configuration.KEYBOARD_UNDEFINED &&
+                config.hardKeyboardHidden != Configuration.HARDKEYBOARDHIDDEN_YES);
         String defaultType = hasHardwareKeyboard ? "symbols" : "qwerty";
 
         String type = prefs.getString("keyboard_type", defaultType);
+        if (mInputService != null ? mInputService.hasHardwareKeyboardConnected() : hasHardwareKeyboard) {
+            type = "none";
+        }
         mStrokeAlign = prefs.getString("stroke_align", "right");
         mTabletAlign = prefs.getString("tablet_align", "right");
         float strokeWidthScale = 1.0f;
@@ -286,9 +298,9 @@ public class InputView extends LinearLayout {
         } catch (Exception e) {
             // ignore
         }
-        float candidateTextSizeScale = 1.0f;
+        float candidateFontSizeSp = 24.0f;
         try {
-            candidateTextSizeScale = Float.parseFloat(prefs.getString("candidate_text_size_scale", "1.0"));
+            candidateFontSizeSp = Float.parseFloat(prefs.getString("candidate_font_size", "24"));
         } catch (Exception e) {
             // ignore
         }
@@ -349,8 +361,12 @@ public class InputView extends LinearLayout {
         int maxAllowedHeight = (availableHeight / 2) / totalRows;
         int newAdjustedButtonHeight = Math.max(minButtonHeight, Math.min(defaultButtonHeight, maxAllowedHeight));
 
-        int newAdjustedCandidateHeight = (int) (getResources().getDimension(R.dimen.candidate_height) * candidateHeightScale);
-        float newAdjustedCandidateTextSize = getResources().getDimension(R.dimen.candidate_text_size) * candidateTextSizeScale;
+        float newAdjustedCandidateTextSize = TypedValue.applyDimension(
+                TypedValue.COMPLEX_UNIT_SP,
+                candidateFontSizeSp,
+                getResources().getDisplayMetrics()
+        );
+        int newAdjustedCandidateHeight = (int) (getResources().getDimension(R.dimen.candidate_height) * (candidateFontSizeSp / 24.0f) * candidateHeightScale);
 
         if (mAdjustedButtonHeight != newAdjustedButtonHeight ||
                 mAdjustedCandidateHeight != newAdjustedCandidateHeight ||
@@ -361,18 +377,23 @@ public class InputView extends LinearLayout {
             changed = (mKeyboardType != null); // 高さが変わった場合も再描画が必要
         }
 
-        // 候補ビューの高さを適用
-        if (mCandidatesView != null) {
-            ViewGroup.LayoutParams lp = mCandidatesView.getLayoutParams();
-            if (lp != null) {
-                lp.height = mAdjustedCandidateHeight;
-                mCandidatesView.setLayoutParams(lp);
+        if (mBtnExpandCandidates != null) {
+            mBtnExpandCandidates.setTextSize(TypedValue.COMPLEX_UNIT_PX, mAdjustedCandidateTextSize);
+            if (mAdjustedCandidateHeight > 0) {
+                mBtnExpandCandidates.setMinHeight(mAdjustedCandidateHeight);
             }
+        }
+        if (mCandidateBarLayout != null && mAdjustedCandidateHeight > 0) {
+            mCandidateBarLayout.setMinimumHeight(mAdjustedCandidateHeight);
         }
 
         if (mCurrentKeyboardView != null) {
             mCurrentKeyboardView.setRowHeight(mAdjustedButtonHeight);
             mCurrentKeyboardView.readPrefs();
+        }
+
+        if (mCandidateButton == null || mCandidateButton.length == 0) {
+            hideCandidatesView();
         }
 
         if (changed && mLastEditorInfo != null) {
@@ -423,7 +444,7 @@ public class InputView extends LinearLayout {
                 case "stroke":
                     StrokeKeyboardView sv = new StrokeKeyboardView(getContext());
                     sv.setOnKeyActionListener(this::onClickKey);
-                    sv.setOnHelpListener(() -> mInputService.showStrokeHelp());
+                    sv.setOnHelpListener(mInputService::showStrokeHelp);
                     mCurrentKeyboardView = sv;
                     // ストロークエリアの高さは、幅（baseSize * scale）の半分として計算される
                     int baseSize = Math.min(getResources().getDisplayMetrics().widthPixels, getResources().getDisplayMetrics().heightPixels);
@@ -739,7 +760,7 @@ public class InputView extends LinearLayout {
     private void onClickCandidateButton(View v) {
         if (mHapticEnabled) {
             v.setHapticFeedbackEnabled(true);
-            v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP, HapticFeedbackConstants.FLAG_IGNORE_GLOBAL_SETTING);
+            v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
         }
         int index = (int) v.getTag();
         mInputService.pickCandidateViewManually(index);
@@ -769,12 +790,12 @@ public class InputView extends LinearLayout {
                 mCandidateExpandedScroll.setLayoutParams(lp);
                 mCandidateExpandedScroll.setVisibility(VISIBLE);
 
-                // Gboardのように、展開時に現在選択中（または1行表示の右端付近）の候補位置へスクロールして続きを表示
+                // 展開時に現在選択中の候補位置へあらかじめスクロールして先頭に表示
                 mCandidateExpandedScroll.post(() -> {
                     if (mCandidateButton != null && mCandidateExpandedFlexbox != null) {
                         int selectedIdx = 0;
                         for (int i = 0; i < mCandidateButton.length; i++) {
-                            if (mCandidateButton[i].isSelected()) {
+                            if (mCandidateButton[i] != null && mCandidateButton[i].isSelected()) {
                                 selectedIdx = i;
                                 break;
                             }
@@ -782,7 +803,8 @@ public class InputView extends LinearLayout {
                         View selectedChip = mCandidateExpandedFlexbox.getChildAt(selectedIdx);
                         if (selectedChip != null) {
                             int chipTop = selectedChip.getTop() + mCandidateExpandedFlexbox.getTop();
-                            mCandidateExpandedScroll.scrollTo(0, Math.max(0, chipTop - (int) (8 * getResources().getDisplayMetrics().density)));
+                            float density = getResources().getDisplayMetrics().density;
+                            mCandidateExpandedScroll.scrollTo(0, Math.max(0, chipTop - (int) (8 * density)));
                         }
                     }
                 });
@@ -816,6 +838,30 @@ public class InputView extends LinearLayout {
     }
 
     /**
+     * InputView 内の候補ボタン（1行表示およびフレックス表示共通）を生成します。
+     *
+     * @param parent 追加先のコンテナレイアウト
+     * @param index 候補のインデックス
+     * @param text 表示するラベルテキスト
+     * @param isUserDict ユーザー辞書由来の候補かどうか
+     * @return 生成された Button
+     */
+    private Button createCandidateButton(ViewGroup parent, int index, String text, boolean isUserDict) {
+        Button b = (Button) LayoutInflater.from(getContext()).inflate(R.layout.candidate_inputview_chip_item, parent, false);
+        b.setTextSize(TypedValue.COMPLEX_UNIT_PX, mAdjustedCandidateTextSize);
+        if (mAdjustedCandidateHeight > 0) {
+            b.setMinHeight(mAdjustedCandidateHeight);
+        }
+        b.setText(text);
+        if (isUserDict) {
+            b.setTextColor(androidx.core.content.ContextCompat.getColor(getContext(), R.color.candidate_user_dict_fg));
+        }
+        b.setOnClickListener(this::onClickCandidateButton);
+        b.setTag(index);
+        return b;
+    }
+
+    /**
      * 指定された候補リストに基づいて、候補表示エリアにボタンを生成・配置します。
      * 生成後、最初の候補を選択（ハイライト）状態にします。
      *
@@ -828,23 +874,14 @@ public class InputView extends LinearLayout {
         }
 
         mCandidateButton = new Button[candidates.size()];
-        int style = R.style.CandidateButton;
-        LayoutParams lp = new LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.MATCH_PARENT);
 
         for (int i = 0; i < candidates.size(); i++) {
-            Button b = new Button(new ContextThemeWrapper(getContext(), style), null, style);
-            b.setTextSize(TypedValue.COMPLEX_UNIT_PX, mAdjustedCandidateTextSize);
-            b.setOnClickListener(this::onClickCandidateButton);
-            b.setTag(i);
-            b.setText(candidates.get(i));
-            mCandidatesLayout.addView(b, lp);
+            String text = candidates.get(i);
+            Button b = createCandidateButton(mCandidatesLayout, i, text, false);
+            mCandidatesLayout.addView(b);
             mCandidateButton[i] = b;
 
-            TextView chip = (TextView) LayoutInflater.from(getContext()).inflate(R.layout.candidate_chip_item, mCandidateExpandedFlexbox, false);
-            chip.setTextSize(TypedValue.COMPLEX_UNIT_PX, mAdjustedCandidateTextSize);
-            chip.setText(candidates.get(i));
-            chip.setOnClickListener(this::onClickCandidateButton);
-            chip.setTag(i);
+            Button chip = createCandidateButton(mCandidateExpandedFlexbox, i, text, false);
             mCandidateExpandedFlexbox.addView(chip);
         }
         selectCandidate(0);
@@ -861,32 +898,32 @@ public class InputView extends LinearLayout {
             return;
         }
 
-        mCandidateButton = new Button[candidates.size()];
-        LayoutParams lp = new LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.MATCH_PARENT);
-
-        for (int i = 0; i < candidates.size(); i++) {
-            Candidate c = candidates.get(i);
-
-            int style = c.isUserDict ? R.style.UserCandidateButton : R.style.CandidateButton;
-
-            Button b = new Button(new ContextThemeWrapper(getContext(), style), null, style);
-            b.setTextSize(TypedValue.COMPLEX_UNIT_PX, mAdjustedCandidateTextSize);
-            b.setOnClickListener(this::onClickCandidateButton);
-            b.setTag(i);
-
+        List<Candidate> filtered = new ArrayList<>();
+        Set<String> seen = new HashSet<>();
+        for (Candidate c : candidates) {
             String label = c.candidate;
-            if (c.annotation != null) {
+            if (mShowAnnotation && c.annotation != null && !c.annotation.isEmpty()) {
                 label += ";" + c.annotation;
             }
-            b.setText(label);
-            mCandidatesLayout.addView(b, lp);
+            if (seen.add(label)) {
+                filtered.add(c);
+            }
+        }
+
+        mCandidateButton = new Button[filtered.size()];
+
+        for (int i = 0; i < filtered.size(); i++) {
+            Candidate c = filtered.get(i);
+            String label = c.candidate;
+            if (mShowAnnotation && c.annotation != null && !c.annotation.isEmpty()) {
+                label += ";" + c.annotation;
+            }
+
+            Button b = createCandidateButton(mCandidatesLayout, i, label, c.isUserDict);
+            mCandidatesLayout.addView(b);
             mCandidateButton[i] = b;
 
-            TextView chip = (TextView) LayoutInflater.from(getContext()).inflate(R.layout.candidate_chip_item, mCandidateExpandedFlexbox, false);
-            chip.setTextSize(TypedValue.COMPLEX_UNIT_PX, mAdjustedCandidateTextSize);
-            chip.setText(label);
-            chip.setOnClickListener(this::onClickCandidateButton);
-            chip.setTag(i);
+            Button chip = createCandidateButton(mCandidateExpandedFlexbox, i, label, c.isUserDict);
             mCandidateExpandedFlexbox.addView(chip);
         }
         selectCandidate(0);
@@ -963,13 +1000,20 @@ public class InputView extends LinearLayout {
 
     /**
      * 候補表示エリアを非表示にします。
+     * 「候補バーを常に表示」が有効な場合、候補がない状態でも候補バーを表示状態 (VISIBLE) に保ちます。
      */
     public void hideCandidatesView() {
         mIsExpanded = false;
-        if (mCandidateBarLayout != null) mCandidateBarLayout.setVisibility(GONE);
-        if (mCandidatesView != null) mCandidatesView.setVisibility(GONE);
+        boolean showBarWhenEmpty = mKeepCandidateBarVisible
+                && !"none".equals(mKeyboardType)
+                && (mInputService == null || !mInputService.isFloatingCandidateEnabled());
+
+        int barVisibility = showBarWhenEmpty ? VISIBLE : GONE;
+        if (mCandidateBarLayout != null) mCandidateBarLayout.setVisibility(barVisibility);
+        if (mCandidatesView != null) mCandidatesView.setVisibility(barVisibility);
         if (mBtnExpandCandidates != null) mBtnExpandCandidates.setVisibility(GONE);
         if (mCandidateExpandedScroll != null) mCandidateExpandedScroll.setVisibility(GONE);
+
         mKeyboardLayout.setVisibility(VISIBLE);
         updateExpansionState();
     }
@@ -1000,13 +1044,13 @@ public class InputView extends LinearLayout {
                 getResources().getDisplayMetrics().widthPixels, coordsAndSize[2]);
     }
 
-    @SuppressLint("DiscouragedApi")
+    @SuppressLint({"DiscouragedApi", "InternalInsetResource"})
     private int getStatusBarHeight() {
         WindowInsetsCompat insets = ViewCompat.getRootWindowInsets(this);
         if (insets != null) {
-            Insets systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars());
-            if (systemBars.top > 0) {
-                return systemBars.top;
+            Insets statusBars = insets.getInsets(WindowInsetsCompat.Type.statusBars());
+            if (statusBars.top > 0) {
+                return statusBars.top;
             }
         }
         int resourceId = getResources().getIdentifier("status_bar_height", "dimen", "android");
@@ -1252,7 +1296,7 @@ public class InputView extends LinearLayout {
                 flexbox.removeAllViews();
                 LayoutInflater inflater = LayoutInflater.from(getContext());
                 for (int i = 0; i < items.size(); i++) {
-                    TextView chip = (TextView) inflater.inflate(R.layout.candidate_chip_item, flexbox, false);
+                    TextView chip = (TextView) inflater.inflate(R.layout.candidate_floating_chip_item, flexbox, false);
                     chip.setText(items.get(i));
                     final int index = i;
                     chip.setOnClickListener(v -> {
@@ -1304,51 +1348,6 @@ public class InputView extends LinearLayout {
             } else if (chipBottom + padding > (scrollY + viewHeight)) {
                 scroll.smoothScrollTo(0, chipBottom + padding - viewHeight);
             }
-        }
-    }
-
-    private void showFullWidthCandidatePopup(String text) {
-        int screenWidth = getResources().getDisplayMetrics().widthPixels;
-
-        View view = null;
-        if (mCandidatePopup != null && mCandidatePopup.isShowing()) {
-            View current = mCandidatePopup.getContentView();
-            if (current != null && current.findViewById(R.id.tooltip_text) != null) {
-                view = current;
-            }
-        }
-
-        if (view != null) {
-            setTooltipViewText(view, text);
-            updateCandidatePopupPosition();
-        } else {
-            LayoutInflater inflater = LayoutInflater.from(getContext());
-            view = inflater.inflate(R.layout.tooltip_view, null);
-            setTooltipViewText(view, text);
-
-            int[] coordsAndSize = calculateCandidatePopupScreenCoordinates(view);
-            int targetHeight = coordsAndSize[2];
-
-            if (mCandidatePopup != null && mCandidatePopup.isShowing()) {
-                mCandidatePopup.setContentView(view);
-                updateCandidatePopupPosition();
-            } else {
-                mCandidatePopup = new PopupWindow(view, screenWidth, targetHeight);
-                mCandidatePopup.setFocusable(false);
-                mCandidatePopup.setAnimationStyle(0);
-
-                showPopupAtScreenLocationWithSize(mCandidatePopup, coordsAndSize[0], coordsAndSize[1], screenWidth, targetHeight);
-            }
-        }
-    }
-
-    private void setTooltipViewText(View popupContentView, String text) {
-        if (popupContentView == null) return;
-        TextView tv = popupContentView.findViewById(R.id.tooltip_text);
-        if (tv != null) {
-            tv.setText(text);
-        } else if (popupContentView instanceof TextView) {
-            ((TextView) popupContentView).setText(text);
         }
     }
 

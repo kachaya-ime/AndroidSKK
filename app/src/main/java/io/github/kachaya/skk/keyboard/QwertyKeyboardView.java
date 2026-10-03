@@ -22,7 +22,4 @@ public class QwertyKeyboardView extends BaseLayoutKeyboardView {
         super(context, attrs, "custom_qwerty_layout");
     }
 
-    public QwertyKeyboardView(Context context, String baseKey) {
-        super(context, baseKey);
-    }
 }

@@ -8,6 +8,7 @@ import android.content.res.Configuration;
 import android.graphics.Matrix;
 import android.graphics.drawable.ColorDrawable;
 import android.inputmethodservice.InputMethodService;
+import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
@@ -40,6 +41,7 @@ import io.github.kachaya.skk.engine.Dictionary;
 import io.github.kachaya.skk.engine.SKKEngine;
 import io.github.kachaya.skk.engine.SKKIcon;
 import io.github.kachaya.skk.engine.SKKModeFullHiragana;
+import io.github.kachaya.skk.keyboard.PhysicalKeyBinding;
 
 /**
  * SKK 入力メソッドのメインサービス実装です。
@@ -100,11 +102,11 @@ public class InputService extends InputMethodService implements SharedPreference
     private boolean mAutoAsciiMode = false;
     /** SandS (Space and Shift) 機能を有効にする設定。 */
     private boolean mSandS = false;
-    /** 物理キーボードに日本語配列（JIS）を使用する設定。 */
-    private boolean mUseJisPhysicalKeyboard = false;
-    private boolean mUseZenkakuKey = true;
-    private boolean mUseEisuKey = true;
-    private boolean mUseKanaKey = true;
+    /** 物理キーボードの配列設定（"us", "jis", "integrated"）。 */
+    private String mPhysicalKeyboardLayout = "jis";
+    private PhysicalKeyBinding mKeyToggleEnJp;
+    private PhysicalKeyBinding mKeyJapaneseMode;
+    private PhysicalKeyBinding mKeyEnglishMode;
     /** モード切替時にカーソル付近にツールチップを表示する時間（ミリ秒）。0 の場合は非表示。 */
     private int mTooltipDuration = 1000;
     /** ツールチップ表示位置（"top" または "bottom"）。 */
@@ -160,7 +162,13 @@ public class InputService extends InputMethodService implements SharedPreference
      */
     private void logI(String msg) {
         if (BuildConfig.DEBUG) {
-            Log.i("InputService", msg);
+            Log.i(getClass().getSimpleName(), msg);
+        }
+    }
+
+    private void logW(String msg) {
+        if (BuildConfig.DEBUG) {
+            Log.w(getClass().getSimpleName(), msg);
         }
     }
 
@@ -215,15 +223,19 @@ public class InputService extends InputMethodService implements SharedPreference
         if (!prefs.contains("keyboard_type")) {
             Configuration config = context.getResources().getConfiguration();
             boolean hasHardwareKeyboard = (config.keyboard != Configuration.KEYBOARD_NOKEYS &&
-                    config.keyboard != Configuration.KEYBOARD_UNDEFINED);
+                    config.keyboard != Configuration.KEYBOARD_UNDEFINED &&
+                    config.hardKeyboardHidden != Configuration.HARDKEYBOARDHIDDEN_YES);
             String defaultType = hasHardwareKeyboard ? "symbols" : "qwerty";
 
-            // commit() を使用して、直後の setDefaultValues がこの値を認識できるようにする
-            prefs.edit().putString("keyboard_type", defaultType).commit();
+            // apply() を使用してメモリを即時更新し、ディスク書き込みはバックグラウンドで行う
+            prefs.edit().putString("keyboard_type", defaultType).apply();
         }
 
         // 2. その他の静的なデフォルト値を XML から適用（既存の設定は壊さない）
         PreferenceManager.setDefaultValues(context, R.xml.root_preferences, false);
+        PreferenceManager.setDefaultValues(context, R.xml.preferences_display, false);
+        PreferenceManager.setDefaultValues(context, R.xml.preferences_physical_keyboard, false);
+        PreferenceManager.setDefaultValues(context, R.xml.preferences_screen_keyboard, false);
     }
 
     /**
@@ -280,7 +292,7 @@ public class InputService extends InputMethodService implements SharedPreference
         if (ic != null) {
             ic.requestCursorUpdates(InputConnection.CURSOR_UPDATE_IMMEDIATE | InputConnection.CURSOR_UPDATE_MONITOR);
         } else {
-            Log.w("onStartInput", "InputConnection is null");
+            logW("InputConnection is null");
         }
 
         if (mSandS) {
@@ -351,7 +363,11 @@ public class InputService extends InputMethodService implements SharedPreference
         updateInputViewShown();
         if (!mIsInputTypeNull) {
             // IME切り替え時などの消失防止のため明示的に表示要求
-            requestShowSelf(0);
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                requestShowSelf(0);
+            } else {
+                showWindow(true);
+            }
         } else {
             // 入力不可フィールドでは非表示を要求
             requestHideSelf(0);
@@ -564,14 +580,14 @@ public class InputService extends InputMethodService implements SharedPreference
         }
     }
 
-    @SuppressLint("DiscouragedApi")
+    @SuppressLint({"DiscouragedApi", "InternalInsetResource"})
     private int getStatusBarHeight() {
         if (mInputView != null) {
             WindowInsetsCompat insets = ViewCompat.getRootWindowInsets(mInputView);
             if (insets != null) {
-                androidx.core.graphics.Insets systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars());
-                if (systemBars.top > 0) {
-                    return systemBars.top;
+                androidx.core.graphics.Insets statusBars = insets.getInsets(WindowInsetsCompat.Type.statusBars());
+                if (statusBars.top > 0) {
+                    return statusBars.top;
                 }
             }
         }
@@ -750,10 +766,10 @@ public class InputService extends InputMethodService implements SharedPreference
     private void readPrefs() {
         SharedPreferences prefs = (mPrefs != null) ? mPrefs : PreferenceManager.getDefaultSharedPreferences(this);
         mSandS = prefs.getBoolean("s_and_s", false);
-        mUseJisPhysicalKeyboard = prefs.getBoolean("use_jis_physical_keyboard", false);
-        mUseZenkakuKey = prefs.getBoolean("use_zenkaku_key", true);
-        mUseEisuKey = prefs.getBoolean("use_eisu_key", true);
-        mUseKanaKey = prefs.getBoolean("use_kana_key", true);
+        mPhysicalKeyboardLayout = prefs.getString("physical_keyboard_layout", "jis");
+        mKeyToggleEnJp = PhysicalKeyBinding.load(prefs, "physical_key_toggle_en_jp", "use_zenkaku_key", "211");
+        mKeyJapaneseMode = PhysicalKeyBinding.load(prefs, "physical_key_japanese_mode", "use_kana_key", "214");
+        mKeyEnglishMode = PhysicalKeyBinding.load(prefs, "physical_key_english_mode", "use_eisu_key", "213");
         // 設定画面（秒）の値を内部用のミリ秒に変換
         mTooltipDuration = prefs.getInt("tooltip_duration_sec", 1) * 1000;
         mTooltipPosition = prefs.getString("tooltip_position", "top");
@@ -821,6 +837,9 @@ public class InputService extends InputMethodService implements SharedPreference
 
         switch (keyCode) {
             case KeyEvent.KEYCODE_SPACE:
+                if (event.isCtrlPressed() || (event.getMetaState() & KeyEvent.META_CTRL_ON) != 0) {
+                    return true;
+                }
                 if (mSandS) {
                     mSpacePressed = false;
                     if (!mSandSUsed) {
@@ -866,13 +885,52 @@ public class InputService extends InputMethodService implements SharedPreference
             // カーソル不可視等の場合は、物理キー操作をそのままシステムに渡す
             return super.onKeyDown(keyCode, event);
         }
-        logI("onKeyDown keyCode=" + keyCode);
+        logI("onKeyDown keyCode=" + keyCode + " (" + PhysicalKeyBinding.getSingleKeyLabel(keyCode) + ")");
 
-        if (event.isCtrlPressed()) {
-            if (mEngine.processCtrlKey(keyCode)) {
-                if (mSandS && keyCode == KeyEvent.KEYCODE_SPACE) {
-                    mSandSUsed = true;
+        // Ctrl または Alt との同時押しは無視して、キー単体の場合かつ JIS キーボード選択時のみ判定
+        boolean hasCtrlOrAlt = event.isCtrlPressed() || event.isAltPressed()
+                || (event.getMetaState() & (KeyEvent.META_CTRL_ON | KeyEvent.META_ALT_ON)) != 0;
+
+        if ("jis".equals(mPhysicalKeyboardLayout) && !hasCtrlOrAlt) {
+            if (mKeyToggleEnJp != null && mKeyToggleEnJp.matches(event)) {
+                logI("mKeyToggleEnJp matched: keyCode=" + keyCode);
+                if (mEngine != null) {
+                    mEngine.toggleEnglishJapanese();
+                    if (mSandS) {
+                        mSandSUsed = true;
+                    }
+                    return true;
                 }
+            }
+
+            if (mKeyEnglishMode != null && mKeyEnglishMode.matches(event)) {
+                logI("mKeyEnglishMode matched: keyCode=" + keyCode);
+                if (mEngine != null) {
+                    mEngine.toASCIIMode();
+                    return true;
+                }
+            }
+
+            if (mKeyJapaneseMode != null && mKeyJapaneseMode.matches(event)) {
+                logI("mKeyJapaneseMode matched: keyCode=" + keyCode);
+                if (mEngine != null) {
+                    mEngine.handleKanaKey();
+                    return true;
+                }
+            }
+        }
+
+        if (event.isCtrlPressed() || (event.getMetaState() & KeyEvent.META_CTRL_ON) != 0) {
+            if (keyCode == KeyEvent.KEYCODE_SPACE) {
+                if (mEngine != null) {
+                    mEngine.toggleEnglishJapanese();
+                    if (mSandS) {
+                        mSandSUsed = true;
+                    }
+                    return true;
+                }
+            }
+            if (mEngine != null && mEngine.processCtrlKey(keyCode)) {
                 return true;
             }
             if (keyCode == KeyEvent.KEYCODE_DEL) {
@@ -911,30 +969,6 @@ public class InputService extends InputMethodService implements SharedPreference
         }
 
         switch (keyCode) {
-            case KeyEvent.KEYCODE_ZENKAKU_HANKAKU:
-                if (mUseZenkakuKey && mEngine != null) {
-                    mEngine.toggleEnglishJapanese();
-                    return true;
-                }
-                break;
-            case KeyEvent.KEYCODE_GRAVE:
-                if (mUseJisPhysicalKeyboard && mUseZenkakuKey && mEngine != null) {
-                    mEngine.toggleEnglishJapanese();
-                    return true;
-                }
-                break;
-            case KeyEvent.KEYCODE_EISU:
-                if (mUseEisuKey && mEngine != null) {
-                    mEngine.toASCIIMode();
-                    return true;
-                }
-                break;
-            case KeyEvent.KEYCODE_KANA:
-                if (mUseKanaKey && mEngine != null) {
-                    mEngine.handleKanaKey();
-                    return true;
-                }
-                break;
             case KeyEvent.KEYCODE_ESCAPE:
                 if (mEngine.handleCancel()) {
                     return true;
@@ -1000,7 +1034,7 @@ public class InputService extends InputMethodService implements SharedPreference
             isShifted = true;
         }
 
-        if (mUseJisPhysicalKeyboard) {
+        if ("jis".equals(mPhysicalKeyboardLayout)) {
             int keyCode = event.getKeyCode();
             Map<Integer, Character> map = isShifted ? JIS_SHIFTED_MAP : JIS_NORMAL_MAP;
             Character mapped = map.get(keyCode);
@@ -1081,7 +1115,13 @@ public class InputService extends InputMethodService implements SharedPreference
         if (isInputDisabled()) {
             return;
         }
-        if (!mEngine.processCtrlKey(keyCode)) {
+        if (keyCode == KeyEvent.KEYCODE_SPACE) {
+            if (mEngine != null) {
+                mEngine.toggleEnglishJapanese();
+                return;
+            }
+        }
+        if (mEngine != null && !mEngine.processCtrlKey(keyCode)) {
             // エンジンで消費されなかった場合は、Ctrl キーとの組み合わせとしてシステムに送信
             InputConnection ic = getCurrentInputConnection();
             if (ic != null) {
@@ -1135,30 +1175,44 @@ public class InputService extends InputMethodService implements SharedPreference
     }
 
     /**
-     * 現在のキーボードタイプに応じたフローティング候補表示の設定状態を返します。
-     * 物理キーボードが接続されている場合は常に true を返します。
+     * 現在のキーボードタイプ（および物理キーボードの接続状態）に応じたフローティング候補表示の設定状態を返します。
      *
      * @return フローティング表示を使用する場合は true
      */
     public boolean isFloatingCandidateEnabled() {
-        if (hasHardwareKeyboardConnected()) {
-            return true;
-        }
         SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(this);
+        boolean isPhysical = hasHardwareKeyboardConnected();
         String type = prefs.getString("keyboard_type", "qwerty");
-        switch (type) {
-            case "stroke":
-                return prefs.getBoolean("floating_candidate_stroke", true);
-            case "symbols":
-                return prefs.getBoolean("floating_candidate_symbols", true);
-            case "tablet":
-                return prefs.getBoolean("floating_candidate_tablet", false);
-            case "qwerty":
-                return prefs.getBoolean("floating_candidate_qwerty", false);
-            case "none":
-                return prefs.getBoolean("floating_candidate_none", true);
-            default:
-                return false;
+        if (isPhysical) {
+            switch (type) {
+                case "stroke":
+                    return prefs.getBoolean("floating_candidate_physical_stroke", true);
+                case "symbols":
+                    return prefs.getBoolean("floating_candidate_physical_symbols", true);
+                case "tablet":
+                    return prefs.getBoolean("floating_candidate_physical_tablet", true);
+                case "qwerty":
+                    return prefs.getBoolean("floating_candidate_physical_qwerty", true);
+                case "none":
+                    return prefs.getBoolean("floating_candidate_physical_none", true);
+                default:
+                    return true;
+            }
+        } else {
+            switch (type) {
+                case "stroke":
+                    return prefs.getBoolean("floating_candidate_stroke", true);
+                case "symbols":
+                    return prefs.getBoolean("floating_candidate_symbols", true);
+                case "tablet":
+                    return prefs.getBoolean("floating_candidate_tablet", false);
+                case "qwerty":
+                    return prefs.getBoolean("floating_candidate_qwerty", false);
+                case "none":
+                    return prefs.getBoolean("floating_candidate_none", true);
+                default:
+                    return false;
+            }
         }
     }
 
@@ -1257,7 +1311,9 @@ public class InputService extends InputMethodService implements SharedPreference
      */
     public boolean prepareReConversion(String candidate) {
         InputConnection ic = getCurrentInputConnection();
-        if (ic != null && candidate.equals(ic.getTextBeforeCursor(candidate.length(), 0))) {
+        if (ic == null) return false;
+        String textBeforeCursor = ic.getTextBeforeCursor(candidate.length(), 0).toString();
+        if (candidate.equals(textBeforeCursor)) {
             ic.deleteSurroundingText(candidate.length(), 0);
             return true;
         }
@@ -1454,10 +1510,6 @@ public class InputService extends InputMethodService implements SharedPreference
         return mCursorBottom;
     }
 
-    public float getCursorHorizontal() {
-        return mCursorHorizontal;
-    }
-
     public boolean isCursorInvisible() {
         return mIsCursorInvisible;
     }
@@ -1499,9 +1551,6 @@ public class InputService extends InputMethodService implements SharedPreference
 
             int[] coords = calculateTooltipScreenCoordinates(view);
             showPopupAtScreenLocation(mTooltipPopup, coords[0], coords[1]);
-
-            logI(String.format("showTooltip: SCR(%.1f, %.1f), TARGET(%d, %d)",
-                    mCursorHorizontal, mCursorTop, coords[0], coords[1]));
         }
         if (!mIsRegistering) {
             mHideHandler.postDelayed(mHideRunnable, mTooltipDuration);
@@ -1561,8 +1610,6 @@ public class InputService extends InputMethodService implements SharedPreference
             if (targetY < statusBarHeight) {
                 targetY = statusBarHeight;
             }
-
-            logI(String.format("showStrokeHelp: SCR_Y=%d, H=%d", targetY, helpHeight));
             showPopupAtScreenLocation(mHelpPopup, targetX, targetY);
         }
     }

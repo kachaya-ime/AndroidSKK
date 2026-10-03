@@ -126,6 +126,6 @@ public enum SKKModeHalfLatin implements SKKMode {
      */
     @Override
     public String getText() {
-        return "■";
+        return "ab";
     }
 }

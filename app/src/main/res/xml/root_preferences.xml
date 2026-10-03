@@ -24,7 +24,7 @@
 
     <Preference
         android:key="pref_physical_keyboard"
-        android:summary="日本語配列物理キーボードの使用"
+        android:summary="物理キーボードの種別、モード切替キーなど"
         android:title="物理キーボード設定"
         app:fragment="io.github.kachaya.skk.SettingsActivity$PhysicalKeyboardSettingsFragment"
         />

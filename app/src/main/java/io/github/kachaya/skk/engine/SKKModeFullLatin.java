@@ -123,6 +123,6 @@ public enum SKKModeFullLatin implements SKKMode {
      */
     @Override
     public String getText() {
-        return "全英";
+        return "Ａ";
     }
 }

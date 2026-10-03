@@ -1,5 +1,6 @@
 package io.github.kachaya.skk.keyboard;
 
+import android.annotation.SuppressLint;
 import android.content.Context;
 import android.view.ContextThemeWrapper;
 import android.view.MotionEvent;
@@ -80,6 +81,7 @@ public class SymbolKeyboardView extends KeyboardView {
     /**
      * 現在の定義に基づいてボタンを生成し、記号バーを構築します。
      */
+    @SuppressLint("ClickableViewAccessibility")
     private void buildKeyboard() {
         removeAllViews();
         mSymbolButtons.clear();

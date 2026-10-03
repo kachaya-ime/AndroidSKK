@@ -28,6 +28,14 @@
             android:summary="画面キーボードタップ時に触覚フィードバックをおこないます"
             android:title="キー操作時のバイブレーション"
             />
+        <ListPreference
+            android:defaultValue="24"
+            android:entries="@array/candidate_font_sizes"
+            android:entryValues="@array/candidate_font_size_values"
+            android:key="candidate_font_size"
+            android:title="候補のフォントサイズ"
+            app:useSimpleSummaryProvider="true"
+            />
     </PreferenceCategory>
 
     <PreferenceCategory
@@ -39,6 +47,12 @@
             android:key="floating_candidate_none"
             android:summary="変換候補をフローティングポップアップで表示します"
             android:title="フローティング表示"
+            />
+        <SwitchPreference
+            android:defaultValue="true"
+            android:key="floating_candidate_physical_none"
+            android:summary="物理キーボード接続時に変換候補をフローティングポップアップで表示します"
+            android:title="物理キーボード接続時のフローティング表示"
             />
     </PreferenceCategory>
 
@@ -60,6 +74,12 @@
             android:summary="変換候補をフローティングポップアップで表示します"
             android:title="フローティング表示"
             />
+        <SwitchPreference
+            android:defaultValue="true"
+            android:key="floating_candidate_physical_symbols"
+            android:summary="物理キーボード接続時に変換候補をフローティングポップアップで表示します"
+            android:title="物理キーボード接続時のフローティング表示"
+            />
     </PreferenceCategory>
 
     <PreferenceCategory
@@ -79,6 +99,12 @@
             android:key="floating_candidate_qwerty"
             android:summary="変換候補をフローティングポップアップで表示します"
             android:title="フローティング表示"
+            />
+        <SwitchPreference
+            android:defaultValue="true"
+            android:key="floating_candidate_physical_qwerty"
+            android:summary="物理キーボード接続時に変換候補をフローティングポップアップで表示します"
+            android:title="物理キーボード接続時のフローティング表示"
             />
     </PreferenceCategory>
 
@@ -116,6 +142,12 @@
             android:summary="変換候補をフローティングポップアップで表示します"
             android:title="フローティング表示"
             />
+        <SwitchPreference
+            android:defaultValue="true"
+            android:key="floating_candidate_physical_tablet"
+            android:summary="物理キーボード接続時に変換候補をフローティングポップアップで表示します"
+            android:title="物理キーボード接続時のフローティング表示"
+            />
     </PreferenceCategory>
 
     <PreferenceCategory
@@ -151,6 +183,12 @@
             android:key="floating_candidate_stroke"
             android:summary="変換候補をフローティングポップアップで表示します"
             android:title="フローティング表示"
+            />
+        <SwitchPreference
+            android:defaultValue="true"
+            android:key="floating_candidate_physical_stroke"
+            android:summary="物理キーボード接続時に変換候補をフローティングポップアップで表示します"
+            android:title="物理キーボード接続時のフローティング表示"
             />
     </PreferenceCategory>
 

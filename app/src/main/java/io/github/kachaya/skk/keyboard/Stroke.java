@@ -123,21 +123,9 @@ public class Stroke {
             } catch (Exception ignored) {
             }
         }
-        // 各辞書の内容をダンプ（デバッグ用）
-//        dumpDictionary("ALPHABET", ALPHABET_DIC);
-//        dumpDictionary("NUMERIC", NUMERIC_DIC);
-//        dumpDictionary("PUNCTUATION", PUNCTUATION_DIC);
     }
 
     private final List<DictionaryEntry> dictionary;
-
-    private static void dumpDictionary(String name, List<DictionaryEntry> dic) {
-        System.out.println("--- Dictionary: " + name + " (Size=" + dic.size() + ") ---");
-        for (DictionaryEntry entry : dic) {
-            char c = (char) entry.code;
-            System.out.println("  '" + (c > ' ' ? c : "?") + "' (code=" + entry.code + ") fv=" + entry.fv);
-        }
-    }
 
     /**
      * 指定された辞書を使用して Stroke エンジンを初期化します。
@@ -206,22 +194,8 @@ public class Stroke {
             scoredEntries.add(new ScoredEntry(e, avgDirDiff));
         }
         java.util.Collections.sort(scoredEntries);
-
-        // デバッグ出力：入力 FV と上位3候補の情報をログ出力
         if (!scoredEntries.isEmpty()) {
-            System.out.println("Input FV: " + fv);
-            System.out.println("Top 3 candidates (Filtered Size=" + scoredEntries.size() + "):");
-            for (int i = 0; i < Math.min(3, scoredEntries.size()); i++) {
-                ScoredEntry se = scoredEntries.get(i);
-                char c = (char) se.entry.code;
-                System.out.println("  #" + (i + 1) + ": '" + (c > ' ' ? c : "?") + "' (code=" + se.entry.code + ") score=" + String.format("%.2e", se.score) + " fv=" + se.entry.fv);
-            }
-        }
-
-        if (!scoredEntries.isEmpty()) {
-            int bestCode = scoredEntries.get(0).entry.code;
-            System.out.println("Recognized: " + (char) bestCode + " (score=" + String.format("%.2f", scoredEntries.get(0).score) + ")");
-            return bestCode;
+            return scoredEntries.get(0).entry.code;
         }
 
         return 0;
@@ -261,10 +235,6 @@ public class Stroke {
         /** Y方向の総移動距離（絶対値の和） */
         double travelY;
 
-        @Override
-        public String toString() {
-            return "FV{len=" + String.format("%.2f", normalizedLength) + ", dist=" + String.format("%.2f", startEndDist) + ", travelX=" + String.format("%.2f", travelX) + ", travelY=" + String.format("%.2f", travelY) + ", sDir=" + startDir + ", eDir=" + endDir + "}";
-        }
     }
 
     /**
@@ -340,50 +310,6 @@ public class Stroke {
             fv.endDir = fv.dir.length > 0 ? fv.dir[fv.dir.length - 1] : 0;
             fv.startEndDist = Math.hypot(pts.get(0).x - pts.get(n).x, pts.get(0).y - pts.get(n).y);
             return fv;
-        }
-    }
-
-    /**
-     * 特徴量間の類似度（不一致度）計算を行う内部クラスです。
-     */
-    public static class Matcher {
-        /** 方向インデックス間の円環的な距離（最小の角度差）を計算します */
-        private static int dirDist(int a, int b) {
-            int d = Math.abs(a - b);
-            return Math.min(d, DIRECTION_COUNT - d);
-        }
-
-        /**
-         * 2つの特徴ベクトルの非類似度スコアを計算します。数値が小さいほど類似しています。
-         * 方向の差の平均に加え、移動特性や閉じ具合に重み付けをして合算します。
-         *
-         * @param s 認識対象（入力）の特徴
-         * @param g 比較対象（辞書）の特徴
-         * @return 総合的な非類似度スコア
-         */
-        public static double score(FeatureVector s, FeatureVector g) {
-            double result = 0;
-
-            if (s == null || g == null) return Double.MAX_VALUE;
-            int n = Math.min(s.dir.length, g.dir.length);
-            if (n == 0) return Double.MAX_VALUE;
-
-            if (Math.abs(s.travelX - g.travelX) > 1.0f) return Double.MAX_VALUE;
-            if (Math.abs(s.travelY - g.travelY) > 1.0f) return Double.MAX_VALUE;
-
-            if (dirDist(s.startDir, g.startDir) > 2) return Double.MAX_VALUE;
-            if (dirDist(s.endDir, g.endDir) > 2) return Double.MAX_VALUE;
-
-            double dirDiffSum = 0;
-            for (int i = 0; i < n; i++) {
-                int d = dirDist(s.dir[i], g.dir[i]);
-                dirDiffSum += d * d;
-            }
-            double avgDirDiff = dirDiffSum / n;
-
-            result += avgDirDiff * avgDirDiff;  // 方向差分の2乗
-
-            return result;
         }
     }
 

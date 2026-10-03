@@ -1,6 +1,9 @@
 package io.github.kachaya.skk.keyboard;
 
 import android.content.Context;
+import android.util.Log;
+
+import io.github.kachaya.skk.BuildConfig;
 
 import java.io.BufferedReader;
 import java.io.File;
@@ -19,13 +22,15 @@ import java.util.List;
  * </p>
  */
 public class LayoutManager {
+    private static final String TAG = "LayoutManager";
     /** レイアウトファイルを保存するディレクトリ名。 */
     private static final String LAYOUT_DIR = "layouts";
+
     /** レイアウト更新日時を記録するための設定キー。 */
     public static final String PREF_LAYOUT_UPDATED = "layout_updated_at";
 
     /** パレット用：特殊キー (QWERTY等) */
-    public static final List<KeyConfig> PALETTE_SPECIAL_KEYS = new ArrayList<KeyConfig>() {{
+    public static final List<KeyConfig> PALETTE_SPECIAL_KEYS = new ArrayList<>() {{
         add(new KeyConfig(KeyConfig.CODE_SPACE));
         add(new KeyConfig(KeyConfig.CODE_ENTER));
         add(new KeyConfig(KeyConfig.CODE_BACKSPACE));
@@ -42,7 +47,7 @@ public class LayoutManager {
     }};
 
     /** パレット用：Tablet特殊キー（Symキーを除外） */
-    public static final List<KeyConfig> PALETTE_SPECIAL_KEYS_TABLET = new ArrayList<KeyConfig>() {{
+    public static final List<KeyConfig> PALETTE_SPECIAL_KEYS_TABLET = new ArrayList<>() {{
         add(new KeyConfig(KeyConfig.CODE_SPACE));
         add(new KeyConfig(KeyConfig.CODE_ENTER));
         add(new KeyConfig(KeyConfig.CODE_BACKSPACE));
@@ -57,7 +62,7 @@ public class LayoutManager {
     }};
 
     /** パレット用：英数字 */
-    public static final List<KeyConfig> PALETTE_ALPHA_KEYS = new ArrayList<KeyConfig>() {{
+    public static final List<KeyConfig> PALETTE_ALPHA_KEYS = new ArrayList<>() {{
         String alpha = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
         for (char c : alpha.toCharArray()) {
             add(new KeyConfig(String.valueOf(c)));
@@ -65,7 +70,7 @@ public class LayoutManager {
     }};
 
     /** パレット用：記号（QWERTYカスタマイズ用。数字を含む標準的なセット） */
-    public static final List<KeyConfig> PALETTE_SYMBOL_KEYS = new ArrayList<KeyConfig>() {{
+    public static final List<KeyConfig> PALETTE_SYMBOL_KEYS = new ArrayList<>() {{
         String symbols = "0123456789!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~¥";
         for (char c : symbols.toCharArray()) {
             add(new KeyConfig(String.valueOf(c)));
@@ -73,7 +78,7 @@ public class LayoutManager {
     }};
 
     /** パレット用：記号バー専用（物理キーボードにない記号を補完するための最小限の ASCII セット） */
-    public static final List<KeyConfig> PALETTE_SYMBOL_BAR_KEYS = new ArrayList<KeyConfig>() {{
+    public static final List<KeyConfig> PALETTE_SYMBOL_BAR_KEYS = new ArrayList<>() {{
         String basic = "!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~¥";
         for (char c : basic.toCharArray()) {
             add(new KeyConfig(String.valueOf(c)));
@@ -101,7 +106,7 @@ public class LayoutManager {
                 }
                 return sb.toString().trim();
             } catch (IOException e) {
-                e.printStackTrace();
+                Log.e(TAG, "Failed to load layout: " + key, e);
             }
         }
         return defaultValue;
@@ -117,14 +122,14 @@ public class LayoutManager {
     public static void saveLayout(Context context, String key, String layoutJson) {
         File file = getLayoutFile(context, key);
         File dir = file.getParentFile();
-        if (dir != null && !dir.exists()) {
-            dir.mkdirs();
+        if (dir != null && !dir.exists() && !dir.mkdirs()) {
+            Log.e(TAG, "Failed to create directory: " + dir.getAbsolutePath());
         }
 
         try (FileOutputStream fos = new FileOutputStream(file)) {
             fos.write(layoutJson.getBytes(StandardCharsets.UTF_8));
         } catch (IOException e) {
-            e.printStackTrace();
+            Log.e(TAG, "Failed to save layout: " + key, e);
         }
     }
 
@@ -158,12 +163,11 @@ public class LayoutManager {
     }
 
     /**
-     * 指定されたターゲットレイアウトキーに対応する英字キーパレットを返します。
+     * 英字キーパレットを返します。
      *
-     * @param targetPrefKey 対象のレイアウトキー
      * @return 英字キーパレットのリスト
      */
-    public static List<KeyConfig> getAlphaKeysPalette(String targetPrefKey) {
+    public static List<KeyConfig> getAlphaKeysPalette() {
         return PALETTE_ALPHA_KEYS;
     }
 
@@ -174,10 +178,7 @@ public class LayoutManager {
      * @return 記号キーパレットのリスト
      */
     public static List<KeyConfig> getSymbolKeysPalette(String targetPrefKey) {
-        if ("combined_symbols".equals(targetPrefKey)) {
-            return PALETTE_SYMBOL_BAR_KEYS;
-        }
-        return PALETTE_SYMBOL_KEYS;
+        return "combined_symbols".equals(targetPrefKey) ? PALETTE_SYMBOL_BAR_KEYS : PALETTE_SYMBOL_KEYS;
     }
 
     /**
@@ -217,15 +218,15 @@ public class LayoutManager {
     public static void clearLayout(Context context, String targetPrefKey) {
         if ("combined_symbols".equals(targetPrefKey)) {
             File file = getLayoutFile(context, "custom_symbols_layout");
-            if (file.exists()) {
-                file.delete();
+            if (file.exists() && !file.delete()) {
+                Log.e("LayoutManager", "Failed to delete file: " + file.getAbsolutePath());
             }
         } else {
             String[] suffixes = {"_normal", "_shift", "_symbol"};
             for (String suffix : suffixes) {
                 File file = getLayoutFile(context, targetPrefKey + suffix);
-                if (file.exists()) {
-                    file.delete();
+                if (file.exists() && !file.delete()) {
+                    Log.e("LayoutManager", "Failed to delete file: " + file.getAbsolutePath());
                 }
             }
         }
@@ -242,7 +243,9 @@ public class LayoutManager {
             File[] files = dir.listFiles();
             if (files != null) {
                 for (File file : files) {
-                    file.delete();
+                    if (file.exists() && !file.delete()) {
+                        Log.w("LayoutManager", "Failed to delete file: " + file.getAbsolutePath());
+                    }
                 }
             }
         }

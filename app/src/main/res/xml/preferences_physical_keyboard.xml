@@ -1,28 +1,33 @@
 <PreferenceScreen
     xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     >
-    <SwitchPreference
-        android:defaultValue="false"
-        android:key="use_jis_physical_keyboard"
-        android:summary="物理キーボードに日本語配列（JIS）を使用します（Shift+2で「&quot;」を入力等）"
-        android:title="日本語配列物理キーボードを使用する"
+    <ListPreference
+        android:defaultValue="jis"
+        android:entries="@array/physical_keyboard_layouts"
+        android:entryValues="@array/physical_keyboard_layout_values"
+        android:key="physical_keyboard_layout"
+        android:title="物理キーボードの配列"
+        app:useSimpleSummaryProvider="true"
         />
-    <SwitchPreference
-        android:defaultValue="true"
-        android:key="use_zenkaku_key"
-        android:summary="物理キーボードの[半角/全角]キーで入力モードを切り替えます"
-        android:title="日本語配列キーボードで[半角/全角]キーを使用する"
-        />
-    <SwitchPreference
-        android:defaultValue="true"
-        android:key="use_eisu_key"
-        android:summary="物理キーボードの[英数]キーで英語（半角英数）モードに切り替えます"
-        android:title="[英数]キーで英語モードに切り替える"
-        />
-    <SwitchPreference
-        android:defaultValue="true"
-        android:key="use_kana_key"
-        android:summary="物理キーボードの[かな]キーで日本語（ひらがな）モードに切り替えます"
-        android:title="[かな]キーで日本語モードに切り替える"
-        />
+    <PreferenceCategory
+        android:key="category_mode_keys"
+        android:title="モード切替キー割り当て"
+        >
+        <Preference
+            android:key="physical_key_toggle_en_jp"
+            android:title="日英切り替えキー"
+            android:summary="物理キーを押して変更"
+            />
+        <Preference
+            android:key="physical_key_japanese_mode"
+            android:title="日本語モード変更キー"
+            android:summary="物理キーを押して変更"
+            />
+        <Preference
+            android:key="physical_key_english_mode"
+            android:title="英語モード変更キー"
+            android:summary="物理キーを押して変更"
+            />
+    </PreferenceCategory>
 </PreferenceScreen>

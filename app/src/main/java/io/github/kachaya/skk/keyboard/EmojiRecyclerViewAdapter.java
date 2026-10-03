@@ -9,10 +9,12 @@ import android.view.ViewGroup;
 import android.widget.Button;
 
 import androidx.annotation.NonNull;
+import androidx.recyclerview.widget.DiffUtil;
 import androidx.recyclerview.widget.RecyclerView;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 
 import io.github.kachaya.skk.R;
 
@@ -34,8 +36,34 @@ public class EmojiRecyclerViewAdapter extends RecyclerView.Adapter<EmojiRecycler
     }
 
     public void setItems(List<EmojiParser.EmojiItem> items) {
-        mItems = items != null ? items : new ArrayList<>();
-        notifyDataSetChanged();
+        List<EmojiParser.EmojiItem> newItems = items != null ? items : new ArrayList<>();
+        DiffUtil.DiffResult diffResult = DiffUtil.calculateDiff(new DiffUtil.Callback() {
+            @Override
+            public int getOldListSize() {
+                return mItems.size();
+            }
+
+            @Override
+            public int getNewListSize() {
+                return newItems.size();
+            }
+
+            @Override
+            public boolean areItemsTheSame(int oldItemPosition, int newItemPosition) {
+                return Objects.equals(mItems.get(oldItemPosition).emoji, newItems.get(newItemPosition).emoji);
+            }
+
+            @Override
+            public boolean areContentsTheSame(int oldItemPosition, int newItemPosition) {
+                EmojiParser.EmojiItem oldItem = mItems.get(oldItemPosition);
+                EmojiParser.EmojiItem newItem = newItems.get(newItemPosition);
+                return Objects.equals(oldItem.emoji, newItem.emoji) &&
+                        Objects.equals(oldItem.description, newItem.description) &&
+                        Objects.equals(oldItem.group, newItem.group);
+            }
+        });
+        mItems = newItems;
+        diffResult.dispatchUpdatesTo(this);
     }
 
     public void setOnEmojiClickListener(OnEmojiClickListener listener) {
@@ -47,10 +75,11 @@ public class EmojiRecyclerViewAdapter extends RecyclerView.Adapter<EmojiRecycler
     public EmojiViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
         @SuppressLint("AppCompatCustomView")
         Button b = new Button(new ContextThemeWrapper(mContext, R.style.CharacterButton), null, 0) {
-            @SuppressLint("WrongCall")
             @Override
             protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
-                super.onMeasure(widthMeasureSpec, widthMeasureSpec);
+                super.onMeasure(widthMeasureSpec, heightMeasureSpec);
+                int size = getMeasuredWidth();
+                setMeasuredDimension(size, size);
             }
         };
         b.setTextSize(TypedValue.COMPLEX_UNIT_SP, 28);

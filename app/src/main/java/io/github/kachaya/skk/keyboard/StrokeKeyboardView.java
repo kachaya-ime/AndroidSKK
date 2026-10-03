@@ -153,7 +153,7 @@ public class StrokeKeyboardView extends KeyboardView {
 
         // タッチの遊び（1.0mm相当）をDPIに基づいて計算。これは描画開始判定に使用。
         float xdpi = getContext().getResources().getDisplayMetrics().xdpi;
-        mTouchTolerance = (xdpi / 25.4f) * 1.0f;
+        mTouchTolerance = (xdpi / 25.4f);
 
         alphabetStroke = new Stroke(Stroke.ALPHABET_DIC);
         numericStroke = new Stroke(Stroke.NUMERIC_DIC);

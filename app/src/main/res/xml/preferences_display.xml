@@ -8,6 +8,18 @@
         android:summary="入力中に▽や▼を表示します"
         android:title="▽▼モード表示"
         />
+    <SwitchPreference
+        android:defaultValue="true"
+        android:key="show_annotation"
+        android:summary="候補表示時に注釈（;以降）を表示します"
+        android:title="候補の注釈を表示"
+        />
+    <SwitchPreference
+        android:defaultValue="false"
+        android:key="keep_candidate_bar_visible"
+        android:summary="候補がない状態でも候補バーを非表示にしません"
+        android:title="候補バーを常に表示"
+        />
     <SeekBarPreference
         android:defaultValue="1"
         android:key="tooltip_duration_sec"

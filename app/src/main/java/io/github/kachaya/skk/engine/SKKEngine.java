@@ -105,6 +105,8 @@ public class SKKEngine {
     private boolean mEnableLearning = true;
     /** 候補選択が最後に達したときに辞書登録するかどうか。 */
     private boolean mRegisterOnLastCandidate = true;
+    /** 候補表示時の注釈（アノテーション）表示フラグ。 */
+    private boolean mShowAnnotation = true;
     /** 直近の正常な確定情報（再変換用）。 */
     private ConversionInfo mLastConversion = null;
     /** Ctrl キーショートカットの割り当てマップ。 */
@@ -204,7 +206,7 @@ public class SKKEngine {
      */
     private void logI(String msg) {
         if (BuildConfig.DEBUG) {
-            Log.i("SKKEngine", msg);
+            Log.i(getClass().getSimpleName(), msg);
         }
     }
 
@@ -236,6 +238,7 @@ public class SKKEngine {
         mUseJisx0201Kana = prefs.getBoolean("use_jisx0201_kana", false);
         mEnableLearning = prefs.getBoolean("enable_learning", true);
         mRegisterOnLastCandidate = prefs.getBoolean("register_on_last_candidate", true);
+        mShowAnnotation = prefs.getBoolean("show_annotation", true);
 
         mCtrlShortcutMap = CtrlShortcutManager.loadMappings(prefs);
 
@@ -1252,6 +1255,15 @@ public class SKKEngine {
                 : new ArrayList<>();
         if (list.isEmpty()) {
             list.add(createDynamicCand(query));
+        } else {
+            Set<String> seen = new HashSet<>();
+            List<Candidate> merged = new ArrayList<>();
+            for (Candidate c : list) {
+                if (seen.add(getCandidateDisplayKey(c))) {
+                    merged.add(c);
+                }
+            }
+            list = merged;
         }
         changeState(SKKStateHeadwordConversion.INSTANCE);
         mCandidateList = list;
@@ -1336,14 +1348,14 @@ public class SKKEngine {
         List<Candidate> merged = new ArrayList<>();
 
         for (Candidate c : list) {
-            if (seen.add(c.candidate)) {
+            if (seen.add(getCandidateDisplayKey(c))) {
                 merged.add(c);
             }
         }
 
         if (!dynamicList.isEmpty()) {
             for (Candidate c : dynamicList) {
-                if (seen.add(c.candidate)) {
+                if (seen.add(getCandidateDisplayKey(c))) {
                     merged.add(c);
                 }
             }
@@ -1641,13 +1653,20 @@ public class SKKEngine {
         }
     }
 
+    private String getCandidateDisplayKey(Candidate c) {
+        if (mShowAnnotation && c.annotation != null && !c.annotation.isEmpty()) {
+            return c.candidate + ";" + c.annotation;
+        }
+        return c.candidate;
+    }
+
     private List<String> getAllCandidateItems(List<Candidate> list) {
         List<String> items = new ArrayList<>();
+        Set<String> seen = new HashSet<>();
         for (Candidate c : list) {
-            if (c.annotation != null && !c.annotation.isEmpty()) {
-                items.add(c.candidate + ";" + c.annotation);
-            } else {
-                items.add(c.candidate);
+            String item = getCandidateDisplayKey(c);
+            if (seen.add(item)) {
+                items.add(item);
             }
         }
         return items;

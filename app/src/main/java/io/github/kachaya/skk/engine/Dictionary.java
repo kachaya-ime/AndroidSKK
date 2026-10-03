@@ -4,6 +4,8 @@ import android.content.Context;
 import android.content.res.AssetFileDescriptor;
 import android.util.Log;
 
+import io.github.kachaya.skk.BuildConfig;
+
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
@@ -77,14 +79,9 @@ public class Dictionary {
      * @param msg ログメッセージ
      */
     private void logI(String msg) {
-        Log.i("Dictionary", msg);
-    }
-
-    /**
-     * テスト用のコンストラクタです。
-     */
-    protected Dictionary() {
-        mFilesDirPath = null;
+        if (BuildConfig.DEBUG) {
+            Log.i(getClass().getSimpleName(), msg);
+        }
     }
 
     /**

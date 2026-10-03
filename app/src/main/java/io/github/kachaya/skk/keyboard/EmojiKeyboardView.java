@@ -1,18 +1,20 @@
 package io.github.kachaya.skk.keyboard;
 
+import android.annotation.SuppressLint;
 import android.content.Context;
 import android.util.TypedValue;
 import android.view.ContextThemeWrapper;
-import android.view.GestureDetector;
 import android.view.Gravity;
-import android.view.MotionEvent;
 import android.view.View;
+import android.view.ViewGroup;
 import android.widget.Button;
 import android.widget.HorizontalScrollView;
 import android.widget.LinearLayout;
 
+import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
+import androidx.viewpager2.widget.ViewPager2;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -22,7 +24,7 @@ import io.github.kachaya.skk.R;
 
 /**
  * # group: ごとにカテゴリ分けされた絵文字を表示し、選択して入力できるキーボードビューです。
- * RecyclerView と GridLayoutManager を用い、スムーズなスライド＆フェードアニメーションによるグループ切り替えをサポートします。
+ * ViewPager2 を用いて指でのスムーズな左右スワイプ切り替えをサポートします。
  */
 public class EmojiKeyboardView extends KeyboardView {
 
@@ -36,9 +38,8 @@ public class EmojiKeyboardView extends KeyboardView {
     private String mCurrentGroup;
     private final LinearLayout mCategoryBarLayout;
     private final HorizontalScrollView mCategoryScroll;
-    private final RecyclerView mEmojiRecyclerView;
-    private final EmojiRecyclerViewAdapter mEmojiAdapter;
-    private final GestureDetector mGestureDetector;
+    private final ViewPager2 mViewPager;
+    private final EmojiPagerAdapter mPagerAdapter;
     private final List<Button> mCategoryButtons = new ArrayList<>();
 
     public EmojiKeyboardView(Context context) {
@@ -90,62 +91,26 @@ public class EmojiKeyboardView extends KeyboardView {
 
         addView(topBar, new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT));
 
-        // Emoji Grid RecyclerView (Optimized for performance)
-        mEmojiRecyclerView = new RecyclerView(context);
-        mEmojiRecyclerView.setLayoutManager(new GridLayoutManager(context, 10)); // 8 columns
-        mEmojiRecyclerView.setItemAnimator(null); // Disable animations for instant updates
-        mEmojiRecyclerView.setItemViewCacheSize(100); // Increase view cache
-        mEmojiRecyclerView.setHasFixedSize(true);
+        // ViewPager2 for smooth horizontal paging
+        mViewPager = new ViewPager2(context);
+        mPagerAdapter = new EmojiPagerAdapter();
+        mViewPager.setAdapter(mPagerAdapter);
 
-        mEmojiAdapter = new EmojiRecyclerViewAdapter(context);
-        mEmojiAdapter.setOnEmojiClickListener(item -> {
-            if (mListener != null) {
-                mListener.onKey(new KeyConfig(item.emoji));
-            }
-        });
-        mEmojiRecyclerView.setAdapter(mEmojiAdapter);
-
-        LayoutParams rvLp = new LayoutParams(LayoutParams.MATCH_PARENT, 0, 1.0f);
-        addView(mEmojiRecyclerView, rvLp);
-
-        // Gesture detector for horizontal swipes
-        mGestureDetector = new GestureDetector(context, new GestureDetector.SimpleOnGestureListener() {
-            private static final int SWIPE_THRESHOLD = 100;
-            private static final int SWIPE_VELOCITY_THRESHOLD = 200;
-
+        mViewPager.registerOnPageChangeCallback(new ViewPager2.OnPageChangeCallback() {
             @Override
-            public boolean onFling(MotionEvent e1, MotionEvent e2, float velocityX, float velocityY) {
-                if (e1 == null || e2 == null) return false;
-                float diffX = e2.getX() - e1.getX();
-                float diffY = e2.getY() - e1.getY();
-                if (Math.abs(diffX) > Math.abs(diffY) * 2.0f && Math.abs(diffX) > SWIPE_THRESHOLD && Math.abs(velocityX) > SWIPE_VELOCITY_THRESHOLD) {
-                    if (diffX > 0) {
-                        switchToAdjacentGroup(-1);
-                    } else {
-                        switchToAdjacentGroup(1);
-                    }
-                    return true;
+            public void onPageSelected(int position) {
+                super.onPageSelected(position);
+                if (position >= 0 && position < mGroupKeys.size()) {
+                    mCurrentGroup = mGroupKeys.get(position);
+                    updateCategorySelection();
                 }
-                return false;
             }
         });
 
-        setOnTouchListener((v, event) -> {
-            if (event.getAction() == MotionEvent.ACTION_UP) {
-                v.performClick();
-            }
-            return mGestureDetector.onTouchEvent(event);
-        });
-
-        mEmojiRecyclerView.setOnTouchListener((v, event) -> {
-            if (event.getAction() == MotionEvent.ACTION_UP) {
-                v.performClick();
-            }
-            return mGestureDetector.onTouchEvent(event) || v.onTouchEvent(event);
-        });
+        LayoutParams vpLp = new LayoutParams(LayoutParams.MATCH_PARENT, 0, 1.0f);
+        addView(mViewPager, vpLp);
 
         initCategories();
-        updateEmojis(1);
     }
 
     @Override
@@ -164,6 +129,7 @@ public class EmojiKeyboardView extends KeyboardView {
     }
 
     @Override
+    @SuppressLint("NotifyDataSetChanged")
     public void readPrefs() {
         super.readPrefs();
         mEmojiGroups = EmojiParser.parse(getContext());
@@ -172,7 +138,15 @@ public class EmojiKeyboardView extends KeyboardView {
             mCurrentGroup = mGroupKeys.get(0);
         }
         initCategories();
-        updateEmojis(1);
+        if (mPagerAdapter != null) {
+            mPagerAdapter.notifyDataSetChanged();
+        }
+        if (mViewPager != null && mCurrentGroup != null) {
+            int index = mGroupKeys.indexOf(mCurrentGroup);
+            if (index >= 0) {
+                mViewPager.setCurrentItem(index, false);
+            }
+        }
     }
 
     @Override
@@ -181,25 +155,10 @@ public class EmojiKeyboardView extends KeyboardView {
     }
 
     private void switchToGroup(String groupName) {
-        if (groupName.equals(mCurrentGroup)) return;
-        int oldIdx = mGroupKeys.indexOf(mCurrentGroup);
-        int newIdx = mGroupKeys.indexOf(groupName);
-        int direction = newIdx > oldIdx ? 1 : -1;
-        mCurrentGroup = groupName;
-        performHapticFeedback(this);
-        updateCategorySelection();
-        updateEmojis(direction);
-    }
-
-    private void switchToAdjacentGroup(int direction) {
-        if (mGroupKeys == null || mGroupKeys.isEmpty()) return;
-        int idx = mGroupKeys.indexOf(mCurrentGroup);
-        if (idx == -1) idx = 0;
-        int newIndex = (idx + direction + mGroupKeys.size()) % mGroupKeys.size();
-        mCurrentGroup = mGroupKeys.get(newIndex);
-        performHapticFeedback(this);
-        updateCategorySelection();
-        updateEmojis(direction);
+        int index = mGroupKeys.indexOf(groupName);
+        if (index >= 0 && index < mGroupKeys.size()) {
+            mViewPager.setCurrentItem(index, true);
+        }
     }
 
     private void initCategories() {
@@ -249,20 +208,55 @@ public class EmojiKeyboardView extends KeyboardView {
         }
     }
 
-    private void updateEmojis(int direction) {
-        if (mEmojiGroups == null || mCurrentGroup == null) return;
-        List<EmojiParser.EmojiItem> items = mEmojiGroups.get(mCurrentGroup);
+    private class EmojiPagerAdapter extends RecyclerView.Adapter<PageViewHolder> {
 
-        float startX = direction > 0 ? 60f : -60f;
-        mEmojiRecyclerView.setTranslationX(startX);
-        mEmojiRecyclerView.setAlpha(0.2f);
-        mEmojiAdapter.setItems(items);
-        mEmojiRecyclerView.scrollToPosition(0);
+        @NonNull
+        @Override
+        public PageViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
+            RecyclerView rv = new RecyclerView(parent.getContext());
+            rv.setLayoutParams(new ViewGroup.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.MATCH_PARENT
+            ));
+            rv.setLayoutManager(new GridLayoutManager(parent.getContext(), 10));
+            rv.setItemAnimator(null);
+            rv.setItemViewCacheSize(100);
+            rv.setHasFixedSize(true);
 
-        mEmojiRecyclerView.animate()
-                .translationX(0f)
-                .alpha(1f)
-                .setDuration(180)
-                .start();
+            EmojiRecyclerViewAdapter adapter = new EmojiRecyclerViewAdapter(parent.getContext());
+            adapter.setOnEmojiClickListener(item -> {
+                if (mListener != null) {
+                    mListener.onKey(new KeyConfig(item.emoji));
+                }
+            });
+            rv.setAdapter(adapter);
+
+            return new PageViewHolder(rv, adapter);
+        }
+
+        @Override
+        public void onBindViewHolder(@NonNull PageViewHolder holder, int position) {
+            if (mGroupKeys != null && position >= 0 && position < mGroupKeys.size()) {
+                String group = mGroupKeys.get(position);
+                List<EmojiParser.EmojiItem> items = mEmojiGroups != null ? mEmojiGroups.get(group) : null;
+                holder.adapter.setItems(items);
+            }
+        }
+
+        @Override
+        public int getItemCount() {
+            return mGroupKeys != null ? mGroupKeys.size() : 0;
+        }
+    }
+
+    private static class PageViewHolder extends RecyclerView.ViewHolder {
+        final RecyclerView recyclerView;
+        final EmojiRecyclerViewAdapter adapter;
+
+        PageViewHolder(@NonNull View itemView, EmojiRecyclerViewAdapter adapter) {
+            super(itemView);
+            this.recyclerView = (RecyclerView) itemView;
+            this.adapter = adapter;
+        }
     }
 }

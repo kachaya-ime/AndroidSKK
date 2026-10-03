@@ -84,4 +84,32 @@
         <item>japanese</item>
         <item>english</item>
     </string-array>
+
+    <string-array name="candidate_font_sizes">
+        <item>12sp (小さめ)</item>
+        <item>16sp (やや小さめ)</item>
+        <item>20sp (標準)</item>
+        <item>24sp (やや大きめ)</item>
+        <item>28sp (大きめ)</item>
+        <item>32sp (特大)</item>
+    </string-array>
+    <string-array name="candidate_font_size_values">
+        <item>12</item>
+        <item>16</item>
+        <item>20</item>
+        <item>24</item>
+        <item>28</item>
+        <item>32</item>
+    </string-array>
+
+    <string-array name="physical_keyboard_layouts">
+        <item>英語配列</item>
+        <item>日本語配列</item>
+        <item>一体型</item>
+    </string-array>
+    <string-array name="physical_keyboard_layout_values">
+        <item>us</item>
+        <item>jis</item>
+        <item>integrated</item>
+    </string-array>
 </resources>

@@ -1,5 +1,6 @@
 package io.github.kachaya.skk.keyboard;
 
+import android.annotation.SuppressLint;
 import android.content.Context;
 import android.os.Handler;
 import android.os.Looper;
@@ -146,6 +147,7 @@ public abstract class BaseLayoutKeyboardView extends KeyboardView {
     /**
      * 現在のレイアウト定義に基づき、Button ビューを生成・配置してキーボード UI を構築します。
      */
+    @SuppressLint("ClickableViewAccessibility")
     protected void buildKeyboard() {
         removeAllViews();
 
@@ -219,6 +221,7 @@ public abstract class BaseLayoutKeyboardView extends KeyboardView {
     /**
      * 指定されたボタンに対して、リピート入力（長押しによる連続発火）の挙動を設定します。
      */
+    @SuppressLint("ClickableViewAccessibility")
     protected void setupRepeatKey(Button b, KeyConfig config) {
         b.setOnTouchListener((v, event) -> {
             switch (event.getAction()) {
@@ -244,6 +247,7 @@ public abstract class BaseLayoutKeyboardView extends KeyboardView {
                     return true;
 
                 case MotionEvent.ACTION_UP:
+                    v.performClick();
                 case MotionEvent.ACTION_CANCEL:
                     if (mRepeatRunnable != null) {
                         mRepeatHandler.removeCallbacks(mRepeatRunnable);

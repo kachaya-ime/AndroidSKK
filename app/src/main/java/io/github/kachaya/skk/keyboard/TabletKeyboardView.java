@@ -22,7 +22,4 @@ public class TabletKeyboardView extends BaseLayoutKeyboardView {
         super(context, attrs, "custom_tablet_layout");
     }
 
-    public TabletKeyboardView(Context context, String baseKey) {
-        super(context, baseKey);
-    }
 }

@@ -74,8 +74,7 @@ public abstract class KeyboardView extends LinearLayout {
      */
     protected void performHapticFeedback(View v) {
         if (mHapticEnabled) {
-            v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP,
-                    HapticFeedbackConstants.FLAG_IGNORE_GLOBAL_SETTING);
+            v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
         }
     }
 }

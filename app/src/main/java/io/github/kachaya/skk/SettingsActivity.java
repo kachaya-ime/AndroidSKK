@@ -1,10 +1,17 @@
 package io.github.kachaya.skk;
 
+import android.content.Context;
 import android.content.SharedPreferences;
 import android.net.Uri;
 import android.os.Bundle;
 import android.text.Html;
 import android.text.Spanned;
+import android.util.Log;
+import android.view.KeyEvent;
+import android.view.LayoutInflater;
+import android.view.View;
+import android.widget.Button;
+import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.activity.result.ActivityResultLauncher;
@@ -14,7 +21,9 @@ import androidx.appcompat.app.ActionBar;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.fragment.app.Fragment;
+import androidx.preference.ListPreference;
 import androidx.preference.Preference;
+import androidx.preference.PreferenceCategory;
 import androidx.preference.PreferenceFragmentCompat;
 import androidx.preference.PreferenceManager;
 
@@ -33,6 +42,7 @@ import java.util.TreeMap;
 
 import io.github.kachaya.skk.keyboard.KeyConfig;
 import io.github.kachaya.skk.keyboard.LayoutManager;
+import io.github.kachaya.skk.keyboard.PhysicalKeyBinding;
 
 /**
  * SKK の動作設定やカスタマイズを行うための設定画面アクティビティです。
@@ -203,9 +213,108 @@ public class SettingsActivity extends AppCompatActivity implements
      * 物理キーボード設定サブ画面のフラグメントクラスです。
      */
     public static class PhysicalKeyboardSettingsFragment extends PreferenceFragmentCompat {
+
         @Override
         public void onCreatePreferences(Bundle savedInstanceState, String rootKey) {
             setPreferencesFromResource(R.xml.preferences_physical_keyboard, rootKey);
+
+            setupKeyPref("physical_key_toggle_en_jp", "use_zenkaku_key", "211", "日英切り替えキー");
+            setupKeyPref("physical_key_japanese_mode", "use_kana_key", "214", "日本語モード変更キー");
+            setupKeyPref("physical_key_english_mode", "use_eisu_key", "213", "英語モード変更キー");
+
+            ListPreference layoutPref = findPreference("physical_keyboard_layout");
+            if (layoutPref != null) {
+                updateKeyPrefEnabledState(layoutPref.getValue());
+                layoutPref.setOnPreferenceChangeListener((preference, newValue) -> {
+                    updateKeyPrefEnabledState((String) newValue);
+                    return true;
+                });
+            }
+        }
+
+        private void updateKeyPrefEnabledState(String layoutValue) {
+            boolean isJis = "jis".equals(layoutValue);
+            PreferenceCategory category = findPreference("category_mode_keys");
+            if (category != null) {
+                category.setEnabled(isJis);
+                if (isJis) {
+                    category.setSummary(null);
+                } else {
+                    category.setSummary("※ JISキーボード配列選択時のみ利用できます");
+                }
+            }
+        }
+
+        private void setupKeyPref(String prefKey, String legacySwitchKey, String defaultSerialized, String title) {
+            Preference pref = findPreference(prefKey);
+            if (pref == null) {
+                return;
+            }
+
+            Context context = requireContext();
+            PhysicalKeyBinding binding = PhysicalKeyBinding.load(context, prefKey, legacySwitchKey, defaultSerialized);
+            pref.setSummary(binding.getDisplayLabel());
+
+            pref.setOnPreferenceClickListener(p -> {
+                showKeyCaptureDialog(pref, prefKey, legacySwitchKey, defaultSerialized, title);
+                return true;
+            });
+        }
+
+        private void showKeyCaptureDialog(Preference pref, String prefKey, String legacySwitchKey, String defaultSerialized, String title) {
+            Context context = requireContext();
+            PhysicalKeyBinding currentBinding = PhysicalKeyBinding.load(context, prefKey, legacySwitchKey, defaultSerialized);
+            final PhysicalKeyBinding[] capturedBinding = new PhysicalKeyBinding[]{currentBinding};
+
+            View dialogView = LayoutInflater.from(context).inflate(R.layout.dialog_key_capture, null);
+            TextView keyLabelText = dialogView.findViewById(R.id.text_captured_key);
+            Button buttonClear = dialogView.findViewById(R.id.button_clear);
+            Button buttonResetDefault = dialogView.findViewById(R.id.button_reset_default);
+
+            keyLabelText.setText(currentBinding.getDisplayLabel());
+
+            AlertDialog dialog = new AlertDialog.Builder(context)
+                    .setTitle(title)
+                    .setView(dialogView)
+                    .setPositiveButton("保存", (d, which) -> {
+                        PhysicalKeyBinding.save(context, prefKey, capturedBinding[0]);
+                        pref.setSummary(capturedBinding[0].getDisplayLabel());
+                    })
+                    .setNegativeButton("キャンセル", null)
+                    .create();
+
+            buttonClear.setOnClickListener(v -> {
+                PhysicalKeyBinding emptyBinding = new PhysicalKeyBinding(0);
+                capturedBinding[0] = emptyBinding;
+                keyLabelText.setText(emptyBinding.getDisplayLabel());
+            });
+
+            buttonResetDefault.setOnClickListener(v -> {
+                PhysicalKeyBinding defaultBinding = PhysicalKeyBinding.deserialize(defaultSerialized);
+                capturedBinding[0] = defaultBinding;
+                keyLabelText.setText(defaultBinding.getDisplayLabel());
+            });
+
+            dialog.setOnKeyListener((d, keyCode, event) -> {
+                if (event.getAction() == KeyEvent.ACTION_DOWN) {
+                    if (keyCode == KeyEvent.KEYCODE_BACK && event.getRepeatCount() == 0) {
+                        dialog.dismiss();
+                        return true;
+                    }
+
+                    if (!PhysicalKeyBinding.isJapaneseKeyboardKey(keyCode)) {
+                        return true;
+                    }
+
+                    PhysicalKeyBinding binding = new PhysicalKeyBinding(keyCode);
+                    capturedBinding[0] = binding;
+                    keyLabelText.setText(binding.getDisplayLabel());
+                    return true;
+                }
+                return false;
+            });
+
+            dialog.show();
         }
     }
 
@@ -379,7 +488,7 @@ public class SettingsActivity extends AppCompatActivity implements
                     .show();
         } catch (IOException e) {
             Toast.makeText(this, "ファイルの読み込みに失敗しました", Toast.LENGTH_SHORT).show();
-            e.printStackTrace();
+            Log.e("SettingsActivity", "Failed to read license file", e);
         }
     }
 }

@@ -335,13 +335,4 @@ public class KeyConfig {
         }
     }
 
-    /**
-     * KeyConfig の 2 次元配列からレイアウト文字列 (JSON 形式) を生成します。
-     *
-     * @param data レイアウト配列
-     * @return JSON 文字列
-     */
-    public static String layoutFromConfigArray(KeyConfig[][] data) {
-        return layoutToJsonString(data);
-    }
 }

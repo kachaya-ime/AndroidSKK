@@ -26,6 +26,7 @@ google-services.json
 /app/build/
 /app/release/
 /tool/build/
+/tool/bin/
 /app/src/androidTest/
 /app/src/test/
 
